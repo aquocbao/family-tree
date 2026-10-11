@@ -1,5 +1,5 @@
 :root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Noto Serif', Georgia, 'Times New Roman', serif;
   line-height: 1.5;
   font-weight: 400;
   color: #2f2a20;
@@ -19,19 +19,19 @@
 body {
   margin: 0;
   min-height: 100vh;
+  /* Classical Eastern genealogy look: lacquer-red border bands with gold hồi văn over aged rice paper */
   background:
-    radial-gradient(circle at 18% 12%, rgba(143, 96, 46, 0.14), transparent 42%),
-    radial-gradient(circle at 82% 76%, rgba(143, 96, 46, 0.11), transparent 45%),
-    repeating-linear-gradient(
-      0deg,
-      rgba(120, 83, 43, 0.05) 0,
-      rgba(120, 83, 43, 0.05) 1px,
-      transparent 1px,
-      transparent 24px
-    ),
-    linear-gradient(135deg, #f4e8d3 0%, #ead9bc 52%, #e0cbab 100%);
+    url('/gia-pha-hoi-van.svg') repeat-x left 0 top 10px / 32px 20px,
+    linear-gradient(#6e1a14, #6e1a14) no-repeat left top / 100% 40px,
+    url('/gia-pha-hoi-van.svg') repeat-x left 0 bottom 10px / 32px 20px,
+    linear-gradient(#6e1a14, #6e1a14) no-repeat left bottom / 100% 40px,
+    radial-gradient(ellipse at 50% 40%, transparent 55%, rgba(92, 44, 14, 0.22) 100%),
+    url('/gia-pha-bg.svg') repeat 0 0 / 480px 480px,
+    #efe1c2;
+  background-attachment: scroll, scroll, scroll, scroll, fixed, scroll, scroll;
 }
 
 #app {
   min-height: 100vh;
+  padding: 40px 0;
 }

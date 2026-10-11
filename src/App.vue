@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ADMIN_PATH, SUPER_ADMIN_PATH } from './admin-paths'
 import FamilyTree from './components/FamilyTree.vue'
 import SearchableMemberSelect from './components/SearchableMemberSelect.vue'
 import { fetchFamilyDatabase, saveFamilyDatabase } from './data/family-db-api'
@@ -147,11 +148,11 @@ const route = useRoute()
 const router = useRouter()
 
 const mode = computed<AppMode>(() => {
-  if (route.path === '/admin') {
+  if (route.name === 'admin') {
     return 'admin'
   }
 
-  if (route.path === '/super-admin') {
+  if (route.name === 'super-admin') {
     return 'super-admin'
   }
 
@@ -621,7 +622,7 @@ const setMode = (nextMode: AppMode): void => {
   }
 
   const nextPath =
-    nextMode === 'admin' ? '/admin' : nextMode === 'super-admin' ? '/super-admin' : '/view'
+    nextMode === 'admin' ? ADMIN_PATH : nextMode === 'super-admin' ? SUPER_ADMIN_PATH : '/view'
   void router.push(nextPath)
 }
 
@@ -722,7 +723,7 @@ onMounted(async () => {
         }}
       </p>
       <p class="mode-url">
-        Đường dẫn: <code>{{ mode === 'super-admin' ? '/super-admin' : '/admin' }}</code>
+        Đường dẫn: <code>{{ mode === 'super-admin' ? SUPER_ADMIN_PATH : ADMIN_PATH }}</code>
       </p>
     </section>
 
@@ -900,13 +901,65 @@ onMounted(async () => {
 }
 
 .app-header {
+  position: relative;
+  width: min(640px, 100%);
+  margin: 0.5rem auto 1.75rem;
+  padding: 1.1rem 2.5rem 1.2rem;
   text-align: center;
-  margin-bottom: 1.5rem;
+  color: #f1d48a;
+  background:
+    radial-gradient(ellipse at 50% 30%, #a3291d 0%, #7d1b14 60%, #5e130e 100%);
+  border: 3px solid #c9a24a;
+  border-radius: 6px;
+  box-shadow:
+    inset 0 0 0 5px #7d1b14,
+    inset 0 0 0 6px rgba(241, 212, 138, 0.7),
+    0 10px 24px rgba(60, 20, 8, 0.35);
+}
+
+.app-header::before,
+.app-header::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 64px;
+  height: 64px;
+  background: url('/gia-pha-cloud-corner.svg') no-repeat center / contain;
+  filter: brightness(1.9) saturate(0.6);
+  pointer-events: none;
+}
+
+.app-header::before {
+  left: 0;
+}
+
+.app-header::after {
+  right: 0;
+  transform: scaleX(-1);
+}
+
+.app-header h1,
+.app-header h2 {
+  position: relative;
+  z-index: 1;
 }
 
 .app-header h1 {
-  margin: 0 0 0.5rem;
-  font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+  margin: 0 0 0.25rem;
+  font-family: 'Noto Serif', Georgia, serif;
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  font-size: clamp(1.75rem, 3.5vw, 2.6rem);
+  text-shadow: 0 2px 0 rgba(40, 8, 4, 0.55);
+}
+
+.app-header h2 {
+  margin: 0;
+  font-family: 'Ma Shan Zheng', 'KaiTi', 'STKaiti', serif;
+  font-weight: 400;
+  font-size: clamp(1.6rem, 3vw, 2.3rem);
+  letter-spacing: 0.2em;
+  color: #f6e2a8;
 }
 
 .app-header p {

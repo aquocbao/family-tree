@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import PersonCard from './PersonCard.vue'
 import type { FamilyMember, FamilyUnit } from '../types/family'
 
@@ -16,6 +16,9 @@ const props = withDefaults(
     showSpouse?: boolean
     showViewDetail?: boolean
     depth?: number
+    expandDepth?: number
+    expandRequest?: { keys: Set<string>; nonce: number }
+    highlightedMemberId?: string | null
   }>(),
   {
     canManage: false,
@@ -24,6 +27,9 @@ const props = withDefaults(
     showSpouse: true,
     showViewDetail: true,
     depth: 0,
+    expandDepth: 0,
+    expandRequest: undefined,
+    highlightedMemberId: null,
   },
 )
 
@@ -40,7 +46,17 @@ const spouseA = computed(() => members.value[0])
 const spouseB = computed(() => members.value[1])
 const childUnits = computed(() => props.childUnitsResolver(props.unit.key))
 const hasChildren = computed(() => childUnits.value.length > 0)
-const isExpanded = ref(props.depth === 0)
+const isExpanded = ref(props.depth <= props.expandDepth)
+
+watch(
+  () => props.expandRequest,
+  (request) => {
+    if (request?.keys.has(props.unit.key)) {
+      isExpanded.value = true
+    }
+  },
+  { immediate: true },
+)
 
 const toggleExpanded = (): void => {
   isExpanded.value = !isExpanded.value
@@ -59,6 +75,7 @@ const toggleExpanded = (): void => {
           :show-death-date="showDeathDate"
           :show-spouse="showSpouse"
           :show-view-detail="showViewDetail"
+          :highlighted="highlightedMemberId === spouseA.id"
           @view-detail="emit('viewDetail', $event)"
           @edit="emit('edit', $event)"
           @delete="emit('delete', $event)"
@@ -73,6 +90,7 @@ const toggleExpanded = (): void => {
           :show-death-date="showDeathDate"
           :show-spouse="showSpouse"
           :show-view-detail="showViewDetail"
+          :highlighted="highlightedMemberId === spouseB.id"
           @view-detail="emit('viewDetail', $event)"
           @edit="emit('edit', $event)"
           @delete="emit('delete', $event)"
@@ -89,6 +107,7 @@ const toggleExpanded = (): void => {
           :show-death-date="showDeathDate"
           :show-spouse="showSpouse"
           :show-view-detail="showViewDetail"
+          :highlighted="highlightedMemberId === members[0].id"
           @view-detail="emit('viewDetail', $event)"
           @edit="emit('edit', $event)"
           @delete="emit('delete', $event)"
@@ -122,6 +141,9 @@ const toggleExpanded = (): void => {
         :show-spouse="showSpouse"
         :show-view-detail="showViewDetail"
         :depth="depth + 1"
+        :expand-depth="expandDepth"
+        :expand-request="expandRequest"
+        :highlighted-member-id="highlightedMemberId"
         @view-detail="emit('viewDetail', $event)"
         @edit="emit('edit', $event)"
         @delete="emit('delete', $event)"
@@ -160,14 +182,14 @@ const toggleExpanded = (): void => {
 
 .spouse-line {
   width: 30px;
-  border-top: 2px solid #7f97cb;
+  border-top: 2px solid #9b3a24;
 }
 
 .toggle {
-  border: 1px solid #8ca7de;
+  border: 1px solid #b8892f;
   border-radius: 999px;
-  background: #fff;
-  color: #2f4678;
+  background: #fff8e6;
+  color: #7a1d16;
   font-weight: 600;
   font-size: 0.85rem;
   padding: 0.2rem 0.8rem;
@@ -175,7 +197,7 @@ const toggleExpanded = (): void => {
 }
 
 .toggle:hover {
-  background: #f0f4ff;
+  background: #fbe9bf;
 }
 
 .children {
@@ -186,7 +208,7 @@ const toggleExpanded = (): void => {
   display: flex;
   justify-content: center;
   gap: 0.8rem;
-  border-top: 2px solid #b7c8f0;
+  border-top: 2px solid #a8553a;
 }
 
 .children::before {
@@ -196,7 +218,7 @@ const toggleExpanded = (): void => {
   left: 50%;
   width: 0;
   height: 1rem;
-  border-left: 2px solid #b7c8f0;
+  border-left: 2px solid #a8553a;
   transform: translateX(-50%);
 }
 
@@ -211,7 +233,7 @@ const toggleExpanded = (): void => {
   left: 50%;
   width: 0;
   height: 1rem;
-  border-left: 2px solid #b7c8f0;
+  border-left: 2px solid #a8553a;
   transform: translateX(-50%);
 }
 </style>

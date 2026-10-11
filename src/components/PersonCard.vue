@@ -11,6 +11,7 @@ const props = withDefaults(
     showDeathDate?: boolean
     showSpouse?: boolean
     showViewDetail?: boolean
+    highlighted?: boolean
   }>(),
   {
     canManage: false,
@@ -18,6 +19,7 @@ const props = withDefaults(
     showDeathDate: true,
     showSpouse: true,
     showViewDetail: true,
+    highlighted: false,
   },
 )
 
@@ -78,7 +80,11 @@ const formatDate = (value?: string): string => {
 </script>
 
 <template>
-  <article class="person-card" :class="`person-card--${genderClass}`">
+  <article
+    class="person-card"
+    :class="[`person-card--${genderClass}`, { 'person-card--highlighted': highlighted }]"
+    :data-member-id="member.id"
+  >
     <template v-if="isContentHidden">
       <h3>Đã ẩn thông tin</h3>
     </template>
@@ -124,6 +130,19 @@ const formatDate = (value?: string): string => {
 </template>
 
 <style scoped>
+.person-card--highlighted {
+  outline: 3px solid #e0a020;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(224, 160, 32, 0.25);
+  animation: person-card-pulse 1.2s ease-in-out 2;
+}
+
+@keyframes person-card-pulse {
+  50% {
+    box-shadow: 0 0 0 12px rgba(224, 160, 32, 0.1);
+  }
+}
+
 .person-card {
   background: #ffffff;
   border: 1px solid #d7dbe6;

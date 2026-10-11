@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import App from './App.vue'
+import { ADMIN_PATH, SUPER_ADMIN_PATH } from './admin-paths'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -14,14 +15,18 @@ export const router = createRouter({
       component: App,
     },
     {
-      path: '/admin',
+      path: ADMIN_PATH,
       name: 'admin',
       component: App,
     },
     {
-      path: '/super-admin',
+      path: SUPER_ADMIN_PATH,
       name: 'super-admin',
       component: App,
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      redirect: '/view',
     },
   ],
 })
