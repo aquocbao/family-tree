@@ -3,7 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import type { IncomingMessage } from 'node:http'
-import { DOWNLOAD_KEY } from './src/admin-paths'
+import { APPROVE_KEY, DOWNLOAD_KEY } from './src/admin-paths'
 
 const dbFilePath = path.resolve(import.meta.dirname, 'src/data/family-db.json')
 
@@ -120,7 +120,24 @@ const isValidSettings = (value: unknown): value is RawSettings => {
   )
 }
 
-const familyDbPlugin = (downloadPassword?: string) => {
+// Canonical JSON (sorted keys, null/undefined dropped) to detect real changes to approved data.
+const canonical = (value: unknown): string => {
+  const normalize = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(normalize)
+    if (v && typeof v === 'object') {
+      const out: Record<string, unknown> = {}
+      for (const key of Object.keys(v as Record<string, unknown>).sort()) {
+        const item = (v as Record<string, unknown>)[key]
+        if (item !== undefined && item !== null) out[key] = normalize(item)
+      }
+      return out
+    }
+    return v
+  }
+  return JSON.stringify(normalize(value) ?? null)
+}
+
+const familyDbPlugin = (downloadPassword?: string, approvePassword: string = APPROVE_KEY) => {
   let writeQueue: Promise<void> = Promise.resolve()
 
   return {
@@ -347,6 +364,21 @@ const familyDbPlugin = (downloadPassword?: string) => {
               return
             }
 
+            // Approving (changing members/settings) requires the approval password.
+            let current: { members?: unknown; settings?: unknown } = {}
+            try {
+              current = JSON.parse(normalizeJsonText(await fs.readFile(dbFilePath, 'utf8'))) as typeof current
+            } catch {
+              current = {}
+            }
+            const changesApproved =
+              canonical(current.members) !== canonical(payload.members) ||
+              canonical(current.settings) !== canonical(payload.settings)
+            if (changesApproved && req.headers['x-approve-password'] !== approvePassword) {
+              setTimeout(() => sendJson(401, { error: 'Sai mật khẩu phê duyệt.' }), 800)
+              return
+            }
+
             await fs.mkdir(path.dirname(dbFilePath), { recursive: true })
 
             writeQueue = writeQueue
@@ -385,6 +417,6 @@ const familyDbPlugin = (downloadPassword?: string) => {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [vue(), familyDbPlugin(env.DOWNLOAD_PASSWORD || DOWNLOAD_KEY)],
+    plugins: [vue(), familyDbPlugin(env.DOWNLOAD_PASSWORD || DOWNLOAD_KEY, env.APPROVE_PASSWORD || APPROVE_KEY)],
   }
 })

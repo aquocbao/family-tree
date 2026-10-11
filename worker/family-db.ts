@@ -2,7 +2,7 @@
 // Storage: Workers KV namespace bound as FAMILY_DB_KV. If KV is empty (or not bound), GET falls back
 // to the bundled src/data/family-db.json so the site still loads.
 import seedDatabase from '../src/data/family-db.json'
-import { DOWNLOAD_KEY } from '../src/admin-paths'
+import { APPROVE_KEY, DOWNLOAD_KEY } from '../src/admin-paths'
 
 interface KVNamespaceLike {
   get(key: string): Promise<string | null>
@@ -13,6 +13,8 @@ interface Env {
   FAMILY_DB_KV?: KVNamespaceLike
   /** Worker secret required to download the JSON file (npx wrangler secret put DOWNLOAD_PASSWORD). */
   DOWNLOAD_PASSWORD?: string
+  /** Optional Worker secret overriding APPROVE_KEY. */
+  APPROVE_PASSWORD?: string
 }
 
 type Context = { request: Request; env: Env }
@@ -109,6 +111,23 @@ export const onRequestPut = async ({ request, env }: Context): Promise<Response>
   const error = validate(payload)
   if (error) return json(400, { error: `Payload không hợp lệ: ${error}` })
 
+  // Changing the approved data (members/settings) = approving. That needs the approval password;
+  // ordinary edits only touch the pending copy and stay open to admins.
+  try {
+    const stored = await env.FAMILY_DB_KV.get(KV_KEY)
+    const current = (stored ? JSON.parse(stored) : seedDatabase) as Record<string, unknown>
+    if (changesApprovedData(current, payload)) {
+      const given = request.headers.get('X-Approve-Password') ?? ''
+      if (!given || !(await passwordMatches(given, env.APPROVE_PASSWORD || APPROVE_KEY))) {
+        await new Promise((resolve) => setTimeout(resolve, 800))
+        return json(401, { error: 'Sai mật khẩu phê duyệt.' })
+      }
+    }
+  } catch (err) {
+    const detail = err instanceof Error ? ` ${err.message}` : ''
+    return json(500, { error: `Không thể đọc dữ liệu hiện tại.${detail}` })
+  }
+
   try {
     await env.FAMILY_DB_KV.put(KV_KEY, JSON.stringify(pick(payload)))
     return json(200, { ok: true })
@@ -117,6 +136,26 @@ export const onRequestPut = async ({ request, env }: Context): Promise<Response>
     return json(500, { error: `Không thể ghi dữ liệu family-db.${detail}` })
   }
 }
+
+// Canonical JSON: sorted keys, null/undefined dropped, so harmless differences don't count as changes.
+const canonical = (value: unknown): string => {
+  const normalize = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(normalize)
+    if (v && typeof v === 'object') {
+      const out: Record<string, unknown> = {}
+      for (const key of Object.keys(v as Record<string, unknown>).sort()) {
+        const item = (v as Record<string, unknown>)[key]
+        if (item !== undefined && item !== null) out[key] = normalize(item)
+      }
+      return out
+    }
+    return v
+  }
+  return JSON.stringify(normalize(value) ?? null)
+}
+
+const changesApprovedData = (current: Record<string, unknown>, next: Record<string, unknown>): boolean =>
+  canonical(current.members) !== canonical(next.members) || canonical(current.settings) !== canonical(next.settings)
 
 // ---- Authenticated download of the whole database ----
 const sha256 = async (text: string): Promise<Uint8Array> =>

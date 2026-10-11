@@ -689,8 +689,26 @@ const deleteMember = async (id: string): Promise<void> => {
   }
 }
 
+const isApprovePromptOpen = ref(false)
+const approvePassword = ref('')
+const approveError = ref('')
+const approvePasswordRef = ref<HTMLInputElement | null>(null)
+
+const openApprovePrompt = async (): Promise<void> => {
+  isApprovePromptOpen.value = true
+  approveError.value = ''
+  await nextTick()
+  approvePasswordRef.value?.focus()
+}
+
+const closeApprovePrompt = (): void => {
+  isApprovePromptOpen.value = false
+  approvePassword.value = ''
+  approveError.value = ''
+}
+
 const approvePendingChanges = async (): Promise<void> => {
-  if (!isSuperAdminMode.value || !pendingMembers.value || !pendingSettings.value) {
+  if (!isSuperAdminMode.value || !pendingMembers.value || !pendingSettings.value || !approvePassword.value) {
     return
   }
 
@@ -706,7 +724,8 @@ const approvePendingChanges = async (): Promise<void> => {
       nextPendingUpdatedAt: undefined,
     })
 
-    await saveFamilyDatabase(nextDatabase)
+    await saveFamilyDatabase(nextDatabase, { approvePassword: approvePassword.value })
+    closeApprovePrompt()
     approvedMembers.value = nextApprovedMembers
     approvedSettings.value = nextApprovedSettings
     pendingMembers.value = null
@@ -717,8 +736,11 @@ const approvePendingChanges = async (): Promise<void> => {
     resetForm()
     syncTreeSettingsForCurrentMode()
   } catch (error) {
-    loadingError.value =
-      error instanceof Error ? error.message : 'Không thể phê duyệt thay đổi.'
+    // Wrong password: keep the form open and show the message next to it.
+    approveError.value = error instanceof Error ? error.message : 'Không thể phê duyệt thay đổi.'
+    approvePassword.value = ''
+    await nextTick()
+    approvePasswordRef.value?.focus()
   } finally {
     isSaving.value = false
   }
@@ -875,15 +897,33 @@ onMounted(async () => {
         <template v-if="pendingUpdatedLabel"> (cập nhật: {{ pendingUpdatedLabel }})</template>.
       </p>
       <p v-else>Chưa có thay đổi chờ duyệt.</p>
-      <button
-        v-if="isSuperAdminMode"
-        type="button"
-        class="approve-btn"
-        :disabled="isSaving || !hasPendingChanges"
-        @click="approvePendingChanges"
-      >
-        {{ isSaving ? 'Đang xử lý...' : 'Phê duyệt thay đổi' }}
-      </button>
+      <template v-if="isSuperAdminMode">
+        <button
+          v-if="!isApprovePromptOpen"
+          type="button"
+          class="approve-btn"
+          :disabled="isSaving || !hasPendingChanges"
+          @click="openApprovePrompt"
+        >
+          Phê duyệt thay đổi
+        </button>
+        <form v-else class="approve-form" @submit.prevent="approvePendingChanges">
+          <input
+            ref="approvePasswordRef"
+            v-model="approvePassword"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Mật khẩu phê duyệt"
+            aria-label="Mật khẩu phê duyệt"
+            :disabled="isSaving"
+          />
+          <button type="submit" class="approve-btn" :disabled="isSaving || !approvePassword">
+            {{ isSaving ? 'Đang xử lý...' : 'Xác nhận phê duyệt' }}
+          </button>
+          <button type="button" class="download-cancel" :disabled="isSaving" @click="closeApprovePrompt">Hủy</button>
+          <span v-if="approveError" class="download-error">{{ approveError }}</span>
+        </form>
+      </template>
     </section>
 
     <div v-if="isEditableMode" class="admin-panels">
@@ -1420,6 +1460,21 @@ onMounted(async () => {
   font-weight: 600;
   padding: 0.4rem 0.75rem;
   cursor: pointer;
+}
+
+.approve-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.approve-form input {
+  border: 1px solid #c7a979;
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  font: inherit;
+  min-width: 200px;
 }
 
 .download-error {

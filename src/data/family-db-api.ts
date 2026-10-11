@@ -81,11 +81,15 @@ export const fetchFamilyDatabase = async (): Promise<FamilyDatabase> => {
   }
 }
 
-export const saveFamilyDatabase = async (database: FamilyDatabase): Promise<void> => {
+export const saveFamilyDatabase = async (
+  database: FamilyDatabase,
+  options: { approvePassword?: string } = {},
+): Promise<void> => {
   const response = await fetch('/api/family-db', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
+      ...(options.approvePassword ? { 'X-Approve-Password': options.approvePassword } : {}),
     },
     body: JSON.stringify(database),
   })
