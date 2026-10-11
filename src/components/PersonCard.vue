@@ -122,7 +122,7 @@ const formatDate = (value?: string): string => {
       <p v-if="showBirthDate"><strong>Ngày sinh:</strong> {{ formatDate(member.birthDate) }}</p>
       <p v-if="showDeathDate && member.deathDate"><strong>Ngày mất:</strong> {{ formatDate(member.deathDate) }}</p>
       <p v-if="showDeathDate && lunarDeathDate"><strong>Ngày mất (âm lịch):</strong> {{ lunarDeathDate }}</p>
-      <p v-if="canShowSpouse"><strong>Vợ/Chồng:</strong> {{ spouseName }}</p>
+      <p v-if="canShowSpouse" class="one-line"><strong>Vợ/Chồng:</strong> {{ spouseName }}</p>
     </template>
 
     <div class="actions">
@@ -177,8 +177,9 @@ const formatDate = (value?: string): string => {
   border: 1px solid #d7dbe6;
   border-radius: 12px;
   padding: 1rem;
-  width: 100%;
-  max-width: 260px;
+  /* Card grows to fit the full name on one line */
+  width: max-content;
+  min-width: 200px;
   box-shadow: 0 2px 8px rgba(24, 39, 75, 0.06);
 }
 
@@ -200,12 +201,26 @@ const formatDate = (value?: string): string => {
 .person-card h3 {
   margin: 0 0 0.5rem;
   color: #1b2a4a;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+}
+
+/* Details and buttons follow the card width (set by the name) instead of widening it */
+.person-card p,
+.actions {
+  width: 0;
+  min-width: 100%;
 }
 
 .person-card p {
   margin: 0.25rem 0;
   overflow-wrap: anywhere;
+}
+
+/* Vợ/Chồng stays on one line and may widen the card, like the name */
+.person-card p.one-line {
+  width: auto;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .actions {
@@ -270,8 +285,7 @@ const formatDate = (value?: string): string => {
   }
 
   .person-card {
-    width: 150px;
-    max-width: 150px;
+    min-width: 140px;
     padding: 0.6rem 0.65rem;
     border-radius: 10px;
     font-size: 0.8rem;
