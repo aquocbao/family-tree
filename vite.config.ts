@@ -1,8 +1,9 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import type { IncomingMessage } from 'node:http'
+import { DOWNLOAD_KEY } from './src/admin-paths'
 
 const dbFilePath = path.resolve(import.meta.dirname, 'src/data/family-db.json')
 
@@ -119,7 +120,7 @@ const isValidSettings = (value: unknown): value is RawSettings => {
   )
 }
 
-const familyDbPlugin = () => {
+const familyDbPlugin = (downloadPassword?: string) => {
   let writeQueue: Promise<void> = Promise.resolve()
 
   return {
@@ -140,6 +141,43 @@ const familyDbPlugin = () => {
       ) => void
     }
   }) {
+    // Dev version of the authenticated download (password from DOWNLOAD_PASSWORD in .env.local).
+    server.middlewares.use('/api/family-db/export', (req, res, next) => {
+      if (req.method !== 'POST') {
+        next()
+        return
+      }
+
+      const sendJson = (statusCode: number, payload: unknown): void => {
+        res.statusCode = statusCode
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify(payload))
+      }
+
+      if (!downloadPassword) {
+        sendJson(503, { error: 'Chưa cấu hình mật khẩu tải file: thêm DOWNLOAD_PASSWORD vào .env.local.' })
+        return
+      }
+
+      const given = req.headers['x-download-password']
+      if (given !== downloadPassword) {
+        setTimeout(() => sendJson(401, { error: 'Sai mật khẩu.' }), 800)
+        return
+      }
+
+      void fs
+        .readFile(dbFilePath, 'utf8')
+        .then((content) => {
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(normalizeJsonText(content))
+        })
+        .catch((error: unknown) => {
+          const detail = error instanceof Error ? ` ${error.message}` : ''
+          sendJson(500, { error: `Không thể đọc file family-db.json.${detail}` })
+        })
+    })
+
     server.middlewares.use('/api/family-db', (req, res, next) => {
       const sendJson = (statusCode: number, payload: unknown): void => {
         res.statusCode = statusCode
@@ -344,6 +382,9 @@ const familyDbPlugin = () => {
   }
 }
 
-export default defineConfig({
-  plugins: [vue(), familyDbPlugin()],
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  return {
+    plugins: [vue(), familyDbPlugin(env.DOWNLOAD_PASSWORD || DOWNLOAD_KEY)],
+  }
 })

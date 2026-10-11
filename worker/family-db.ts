@@ -2,6 +2,7 @@
 // Storage: Workers KV namespace bound as FAMILY_DB_KV. If KV is empty (or not bound), GET falls back
 // to the bundled src/data/family-db.json so the site still loads.
 import seedDatabase from '../src/data/family-db.json'
+import { DOWNLOAD_KEY } from '../src/admin-paths'
 
 interface KVNamespaceLike {
   get(key: string): Promise<string | null>
@@ -10,6 +11,8 @@ interface KVNamespaceLike {
 
 interface Env {
   FAMILY_DB_KV?: KVNamespaceLike
+  /** Worker secret required to download the JSON file (npx wrangler secret put DOWNLOAD_PASSWORD). */
+  DOWNLOAD_PASSWORD?: string
 }
 
 type Context = { request: Request; env: Env }
@@ -113,4 +116,37 @@ export const onRequestPut = async ({ request, env }: Context): Promise<Response>
     const detail = err instanceof Error ? ` ${err.message}` : ''
     return json(500, { error: `Không thể ghi dữ liệu family-db.${detail}` })
   }
+}
+
+// ---- Authenticated download of the whole database ----
+const sha256 = async (text: string): Promise<Uint8Array> =>
+  new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))
+
+// Compare via fixed-length hashes so the check does not leak timing information.
+const passwordMatches = async (given: string, expected: string): Promise<boolean> => {
+  const [a, b] = await Promise.all([sha256(given), sha256(expected)])
+  let diff = 0
+  for (let i = 0; i < a.length; i += 1) {
+    diff |= a[i] ^ b[i]
+  }
+  return diff === 0
+}
+
+export const onRequestExport = async ({ request, env }: Context): Promise<Response> => {
+  const expected = env.DOWNLOAD_PASSWORD || DOWNLOAD_KEY
+  const given = request.headers.get('X-Download-Password') ?? ''
+  if (!given || !(await passwordMatches(given, expected))) {
+    // Small delay slows down password guessing.
+    await new Promise((resolve) => setTimeout(resolve, 800))
+    return json(401, { error: 'Sai mật khẩu.' })
+  }
+
+  const response = await onRequestGet({ request, env })
+  if (!response.ok) {
+    return response
+  }
+
+  const headers = new Headers(response.headers)
+  headers.set('Content-Disposition', 'attachment; filename="family-db.json"')
+  return new Response(response.body, { status: 200, headers })
 }

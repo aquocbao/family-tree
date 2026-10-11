@@ -229,18 +229,48 @@ const focusEditorPanel = async (): Promise<void> => {
 const isDownloading = ref(false)
 const downloadError = ref('')
 
+const isDownloadPromptOpen = ref(false)
+const downloadPassword = ref('')
+const downloadPasswordRef = ref<HTMLInputElement | null>(null)
+
+const openDownloadPrompt = async (): Promise<void> => {
+  isDownloadPromptOpen.value = true
+  downloadError.value = ''
+  await nextTick()
+  downloadPasswordRef.value?.focus()
+}
+
+const closeDownloadPrompt = (): void => {
+  isDownloadPromptOpen.value = false
+  downloadPassword.value = ''
+  downloadError.value = ''
+}
+
 const downloadDatabaseJson = async (): Promise<void> => {
-  if (!isSuperAdminMode.value) {
+  if (!isSuperAdminMode.value || !downloadPassword.value) {
     return
   }
 
   isDownloading.value = true
   downloadError.value = ''
   try {
-    // Fetch straight from the server so the file matches exactly what is stored.
-    const response = await fetch('/api/family-db', { cache: 'no-store' })
+    // The server checks the password and returns exactly what is stored (approved + pending).
+    const response = await fetch('/api/family-db/export', {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'X-Download-Password': downloadPassword.value },
+    })
     if (!response.ok) {
-      throw new Error(`Lỗi máy chủ (${response.status}).`)
+      let message = `Lỗi máy chủ (${response.status}).`
+      try {
+        const payload = (await response.json()) as { error?: string }
+        if (payload.error) {
+          message = payload.error
+        }
+      } catch {
+        // keep fallback message
+      }
+      throw new Error(message)
     }
 
     const data = (await response.json()) as unknown
@@ -256,8 +286,12 @@ const downloadDatabaseJson = async (): Promise<void> => {
     link.click()
     link.remove()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
+    closeDownloadPrompt()
   } catch (error) {
-    downloadError.value = error instanceof Error ? `Không thể tải file: ${error.message}` : 'Không thể tải file.'
+    downloadError.value = error instanceof Error ? error.message : 'Không thể tải file.'
+    downloadPassword.value = ''
+    await nextTick()
+    downloadPasswordRef.value?.focus()
   } finally {
     isDownloading.value = false
   }
@@ -813,9 +847,24 @@ onMounted(async () => {
         Đường dẫn: <code>{{ mode === 'super-admin' ? SUPER_ADMIN_PATH : ADMIN_PATH }}</code>
       </p>
       <div v-if="isSuperAdminMode" class="download-row">
-        <button type="button" class="download-btn" :disabled="isDownloading" @click="downloadDatabaseJson">
-          {{ isDownloading ? 'Đang tải...' : '⬇ Tải file JSON dữ liệu' }}
+        <button v-if="!isDownloadPromptOpen" type="button" class="download-btn" @click="openDownloadPrompt">
+          ⬇ Tải file JSON dữ liệu
         </button>
+        <form v-else class="download-form" @submit.prevent="downloadDatabaseJson">
+          <input
+            ref="downloadPasswordRef"
+            v-model="downloadPassword"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Mật khẩu tải file"
+            aria-label="Mật khẩu tải file"
+            :disabled="isDownloading"
+          />
+          <button type="submit" class="download-btn" :disabled="isDownloading || !downloadPassword">
+            {{ isDownloading ? 'Đang kiểm tra...' : 'Tải xuống' }}
+          </button>
+          <button type="button" class="download-cancel" :disabled="isDownloading" @click="closeDownloadPrompt">Hủy</button>
+        </form>
         <span v-if="downloadError" class="download-error">{{ downloadError }}</span>
       </div>
     </section>
@@ -1346,6 +1395,31 @@ onMounted(async () => {
 .download-btn:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.download-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.download-form input {
+  border: 1px solid #c7a979;
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  font: inherit;
+  min-width: 200px;
+}
+
+.download-cancel {
+  border: 1px solid #b9b0a2;
+  border-radius: 8px;
+  background: #fff;
+  color: #5a4a3a;
+  font-weight: 600;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
 }
 
 .download-error {

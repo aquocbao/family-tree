@@ -26,3 +26,6 @@ dist-ssr
 # Cloudflare
 .wrangler
 _to_delete
+
+# Local secrets for the Worker (wrangler dev)
+.dev.vars
