@@ -225,6 +225,44 @@ const focusEditorPanel = async (): Promise<void> => {
   }, 1600)
 }
 
+// ---- Super admin: download the whole database (approved + pending) as a JSON file ----
+const isDownloading = ref(false)
+const downloadError = ref('')
+
+const downloadDatabaseJson = async (): Promise<void> => {
+  if (!isSuperAdminMode.value) {
+    return
+  }
+
+  isDownloading.value = true
+  downloadError.value = ''
+  try {
+    // Fetch straight from the server so the file matches exactly what is stored.
+    const response = await fetch('/api/family-db', { cache: 'no-store' })
+    if (!response.ok) {
+      throw new Error(`Lỗi máy chủ (${response.status}).`)
+    }
+
+    const data = (await response.json()) as unknown
+    const blob = new Blob([`${JSON.stringify(data, null, 2)}\n`], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `family-db_${stamp}.json`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (error) {
+    downloadError.value = error instanceof Error ? `Không thể tải file: ${error.message}` : 'Không thể tải file.'
+  } finally {
+    isDownloading.value = false
+  }
+}
+
 const startEditMember = (id: string): void => {
   if (!isEditableMode.value) {
     return
@@ -774,6 +812,12 @@ onMounted(async () => {
       <p class="mode-url">
         Đường dẫn: <code>{{ mode === 'super-admin' ? SUPER_ADMIN_PATH : ADMIN_PATH }}</code>
       </p>
+      <div v-if="isSuperAdminMode" class="download-row">
+        <button type="button" class="download-btn" :disabled="isDownloading" @click="downloadDatabaseJson">
+          {{ isDownloading ? 'Đang tải...' : '⬇ Tải file JSON dữ liệu' }}
+        </button>
+        <span v-if="downloadError" class="download-error">{{ downloadError }}</span>
+      </div>
     </section>
 
     <section v-if="isEditableMode" class="review-panel">
@@ -1275,6 +1319,38 @@ onMounted(async () => {
   .admin-panels {
     grid-template-columns: 1fr;
   }
+}
+
+.download-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.download-btn {
+  border: 1px solid #a77f48;
+  border-radius: 8px;
+  background: #fff4df;
+  color: #5c3818;
+  font-weight: 700;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+}
+
+.download-btn:hover:not(:disabled) {
+  background: #ffe9c3;
+}
+
+.download-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.download-error {
+  color: #8f1d1d;
+  font-weight: 600;
 }
 
 /* ---------- Mobile ---------- */
