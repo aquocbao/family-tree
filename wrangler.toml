@@ -1,9 +1,19 @@
+# Cloudflare Worker + static assets (deploy with: npm run build && npx wrangler deploy)
+# "name" must match the Worker name in your Cloudflare dashboard.
 name = "family-tree"
-compatibility_date = "2026-09-01"
-pages_build_output_dir = "./dist"
+main = "worker/index.ts"
+compatibility_date = "2025-09-01"
 
-# Create the namespace with:  npx wrangler kv namespace create FAMILY_DB_KV
-# then paste the returned id below.
-[[kv_namespaces]]
-binding = "FAMILY_DB_KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# Storage for edits. Until this is set up, the site loads the bundled src/data/family-db.json
+# and saving returns an error. To enable saving:
+#   1. npx wrangler kv namespace create FAMILY_DB_KV   (or Dashboard → Storage & Databases → KV → Create)
+#   2. Uncomment the 3 lines below and paste the namespace id.
+# [[kv_namespaces]]
+# binding = "FAMILY_DB_KV"
+# id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"

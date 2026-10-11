@@ -1,7 +1,7 @@
-// Cloudflare Pages Function: replaces the Vite dev-server middleware for /api/family-db in production.
+// /api/family-db handlers: replace the Vite dev-server middleware for /api/family-db in production.
 // Storage: Workers KV namespace bound as FAMILY_DB_KV. If KV is empty (or not bound), GET falls back
 // to the bundled src/data/family-db.json so the site still loads.
-import seedDatabase from '../../src/data/family-db.json'
+import seedDatabase from '../src/data/family-db.json'
 
 interface KVNamespaceLike {
   get(key: string): Promise<string | null>
