@@ -1243,4 +1243,61 @@ onMounted(async () => {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Mobile ---------- */
+@media (max-width: 640px) {
+  .app {
+    padding: 1rem 0.6rem 1.5rem;
+  }
+
+  .app-header {
+    margin: 0.25rem auto 1rem;
+    padding: 0.8rem 1.25rem 0.9rem;
+  }
+
+  .app-header::before,
+  .app-header::after {
+    width: 40px;
+    height: 40px;
+  }
+
+  .app-header h1 {
+    letter-spacing: 0.2em;
+    font-size: 1.6rem;
+  }
+
+  .app-header h2 {
+    font-size: 1.5rem;
+  }
+
+  .mode-panel,
+  .editor-panel,
+  .settings-panel {
+    padding: 0.85rem;
+    border-radius: 12px;
+  }
+
+  .mode-actions {
+    flex-wrap: wrap;
+  }
+
+  .mode-url code {
+    word-break: break-all;
+  }
+
+  .review-panel {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* 16px inputs stop iOS Safari from zooming in on focus */
+  .member-form input,
+  .member-form select {
+    font-size: 16px;
+  }
+
+  .form-actions {
+    flex-wrap: wrap;
+  }
+}
 </style>

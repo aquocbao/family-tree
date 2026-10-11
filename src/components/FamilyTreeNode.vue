@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import PersonCard from './PersonCard.vue'
 import type { FamilyMember, FamilyUnit } from '../types/family'
 
@@ -58,14 +58,19 @@ watch(
   { immediate: true },
 )
 
-const toggleExpanded = (): void => {
+const unitContentRef = ref<HTMLElement | null>(null)
+
+const toggleExpanded = async (): Promise<void> => {
   isExpanded.value = !isExpanded.value
+  // Keep the node you just opened/closed in view (matters most on narrow phone screens).
+  await nextTick()
+  unitContentRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
 }
 </script>
 
 <template>
   <li class="node">
-    <div class="unit-content">
+    <div ref="unitContentRef" class="unit-content">
       <div v-if="hasCouple" class="couple-row">
         <PersonCard
           :member="spouseA"
@@ -235,5 +240,28 @@ const toggleExpanded = (): void => {
   height: 1rem;
   border-left: 2px solid #a8553a;
   transform: translateX(-50%);
+}
+
+@media (max-width: 640px) {
+  .node {
+    padding: 0 0.3rem 0.7rem;
+  }
+
+  .couple-row {
+    gap: 0.3rem;
+  }
+
+  .spouse-line {
+    width: 12px;
+  }
+
+  .children {
+    gap: 0.35rem;
+  }
+
+  .toggle {
+    font-size: 0.8rem;
+    padding: 0.3rem 0.8rem;
+  }
 }
 </style>

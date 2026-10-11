@@ -218,4 +218,10 @@ watch(
 .disabled-option:hover {
   background: transparent;
 }
+
+@media (max-width: 640px) {
+  .searchable-input {
+    font-size: 16px; /* prevents iOS zoom on focus */
+  }
+}
 </style>

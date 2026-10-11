@@ -28,10 +28,34 @@ body {
     radial-gradient(ellipse at 50% 40%, transparent 55%, rgba(92, 44, 14, 0.22) 100%),
     url('/gia-pha-bg.svg') repeat 0 0 / 480px 480px,
     #efe1c2;
-  background-attachment: scroll, scroll, scroll, scroll, fixed, scroll, scroll;
+}
+
+@media (max-width: 640px) {
+  body {
+    background:
+      url('/gia-pha-hoi-van.svg') repeat-x left 0 top 6px / 24px 15px,
+      linear-gradient(#6e1a14, #6e1a14) no-repeat left top / 100% 27px,
+      url('/gia-pha-hoi-van.svg') repeat-x left 0 bottom 6px / 24px 15px,
+      linear-gradient(#6e1a14, #6e1a14) no-repeat left bottom / 100% 27px,
+      radial-gradient(ellipse at 50% 40%, transparent 55%, rgba(92, 44, 14, 0.22) 100%),
+      url('/gia-pha-bg.svg') repeat 0 0 / 480px 480px,
+      #efe1c2;
+  }
 }
 
 #app {
   min-height: 100vh;
   padding: 40px 0;
+}
+
+@media (max-width: 640px) {
+  #app {
+    padding: 27px 0;
+  }
+}
+
+/* Lock page scroll while the tree uses the overlay "full view" (iPhone) */
+html.tree-pseudo-full-view,
+html.tree-pseudo-full-view body {
+  overflow: hidden;
 }

@@ -181,6 +181,7 @@ const formatDate = (value?: string): string => {
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 0.75rem;
 }
@@ -230,5 +231,36 @@ const formatDate = (value?: string): string => {
 
 .delete:hover {
   background: #ffeaea;
+}
+
+@media (max-width: 640px) {
+  .person-card {
+    width: 150px;
+    max-width: 150px;
+    padding: 0.6rem 0.65rem;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .person-card h3 {
+    font-size: 0.92rem;
+    margin-bottom: 0.3rem;
+  }
+
+  .person-card p {
+    margin: 0.15rem 0;
+  }
+
+  .actions {
+    gap: 0.3rem;
+    margin-top: 0.5rem;
+  }
+
+  .actions button {
+    padding: 0.3rem 0.45rem;
+    font-size: 0.72rem;
+    border-radius: 6px;
+  }
 }
 </style>

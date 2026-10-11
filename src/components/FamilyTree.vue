@@ -30,6 +30,12 @@ const emit = defineEmits<{
 const selectedUnitKey = ref<string | null>(null)
 const treeWrapperRef = ref<HTMLElement | null>(null)
 const isFullView = ref(false)
+// iPhone Safari has no Fullscreen API for normal elements: fall back to a fixed overlay.
+const isPseudoFullView = ref(false)
+const zoom = ref(1)
+const ZOOM_MIN = 0.4
+const ZOOM_MAX = 1.5
+const ZOOM_STEP = 0.1
 const fullViewError = ref('')
 
 const memberMap = computed(() => {
@@ -432,11 +438,66 @@ const clearFocusedTree = (): void => {
 const syncFullViewState = (): void => {
   const wrapper = treeWrapperRef.value
   if (!wrapper) {
-    isFullView.value = false
+    isFullView.value = isPseudoFullView.value
     return
   }
 
-  isFullView.value = document.fullscreenElement === wrapper
+  isFullView.value = document.fullscreenElement === wrapper || isPseudoFullView.value
+}
+
+const setPseudoFullView = (value: boolean): void => {
+  isPseudoFullView.value = value
+  document.documentElement.classList.toggle('tree-pseudo-full-view', value)
+  syncFullViewState()
+}
+
+const exitAnyFullView = async (): Promise<void> => {
+  if (isPseudoFullView.value) {
+    setPseudoFullView(false)
+  }
+
+  if (document.fullscreenElement === treeWrapperRef.value) {
+    try {
+      await document.exitFullscreen()
+    } catch {
+      // ignore
+    }
+  }
+}
+
+const changeZoom = (delta: number): void => {
+  const next = Math.round((zoom.value + delta) * 10) / 10
+  zoom.value = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next))
+}
+
+const resetZoom = (): void => {
+  zoom.value = 1
+}
+
+// Scroll the tree horizontally so the given element sits in the middle of the frame.
+const centerElementInTree = (element: Element | null | undefined, behavior: ScrollBehavior = 'auto'): void => {
+  const wrapper = treeWrapperRef.value
+  if (!wrapper || !element) {
+    return
+  }
+
+  const wrapperRect = wrapper.getBoundingClientRect()
+  const elementRect = element.getBoundingClientRect()
+  const left = wrapper.scrollLeft + (elementRect.left - wrapperRect.left) - (wrapperRect.width - elementRect.width) / 2
+  wrapper.scrollTo({ left: Math.max(0, left), behavior })
+}
+
+const centerOnRoot = async (): Promise<void> => {
+  await nextTick()
+  requestAnimationFrame(() => {
+    centerElementInTree(treeWrapperRef.value?.querySelector('.tree-root > .node > .unit-content'))
+  })
+}
+
+const onEditMember = async (id: string): Promise<void> => {
+  // The edit panel lives outside the tree frame, so leave full view first.
+  await exitAnyFullView()
+  emit('editMember', id)
 }
 
 const toggleFullView = async (): Promise<void> => {
@@ -448,8 +509,13 @@ const toggleFullView = async (): Promise<void> => {
 
   fullViewError.value = ''
 
+  if (isPseudoFullView.value) {
+    setPseudoFullView(false)
+    return
+  }
+
   if (!document.fullscreenEnabled || !wrapper.requestFullscreen) {
-    fullViewError.value = 'Trình duyệt không hỗ trợ chế độ toàn màn hình.'
+    setPseudoFullView(true)
     return
   }
 
@@ -475,13 +541,35 @@ watch(
   },
 )
 
+watch(selectedUnitKey, () => {
+  void centerOnRoot()
+})
+
+watch(
+  () => props.members.length > 0,
+  (hasMembers) => {
+    if (hasMembers) {
+      void centerOnRoot()
+    }
+  },
+)
+
+watch(zoom, () => {
+  void centerOnRoot()
+})
+
 onMounted(() => {
   document.addEventListener('fullscreenchange', syncFullViewState)
   syncFullViewState()
+  if (window.matchMedia('(max-width: 640px)').matches) {
+    zoom.value = 0.8
+  }
+  void centerOnRoot()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', syncFullViewState)
+  document.documentElement.classList.remove('tree-pseudo-full-view')
   if (highlightTimer) {
     clearTimeout(highlightTimer)
   }
@@ -489,7 +577,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section ref="treeWrapperRef" class="tree-wrapper" :class="{ 'full-view-active': isFullView }">
+  <section
+    ref="treeWrapperRef"
+    class="tree-wrapper"
+    :class="{ 'full-view-active': isFullView, 'pseudo-full-view': isPseudoFullView }"
+  >
     <div class="view-controls">
       <div v-if="isSearchOpen" class="search-box">
         <input
@@ -515,6 +607,11 @@ onBeforeUnmount(() => {
         </ul>
       </div>
       <div class="control-buttons">
+        <div class="zoom-controls" role="group" aria-label="Thu phóng">
+          <button type="button" aria-label="Thu nhỏ" :disabled="zoom <= ZOOM_MIN" @click="changeZoom(-ZOOM_STEP)">−</button>
+          <button type="button" class="zoom-value" title="Về 100%" @click="resetZoom">{{ Math.round(zoom * 100) }}%</button>
+          <button type="button" aria-label="Phóng to" :disabled="zoom >= ZOOM_MAX" @click="changeZoom(ZOOM_STEP)">+</button>
+        </div>
         <button
           type="button"
           class="search-toggle-btn"
@@ -539,7 +636,7 @@ onBeforeUnmount(() => {
       <button type="button" @click="clearFocusedTree">Xem toàn bộ cây</button>
     </div>
 
-    <div class="tree-canvas">
+    <div class="tree-canvas" :style="{ zoom }">
       <ul class="tree-root">
         <FamilyTreeNode
           v-for="unit in selectedRootUnits"
@@ -558,7 +655,7 @@ onBeforeUnmount(() => {
           :show-spouse="showSpouse"
           :show-view-detail="showViewDetail"
           @view-detail="focusFromMember"
-          @edit="emit('editMember', $event)"
+          @edit="onEditMember"
           @delete="emit('deleteMember', $event)"
           @toggle-hidden="emit('toggleMemberHidden', $event)"
         />
@@ -773,5 +870,106 @@ onBeforeUnmount(() => {
 
 .search-toggle-btn:hover {
   background: #ffe9c3;
+}
+
+.zoom-controls {
+  display: inline-flex;
+  border: 1px solid #a77f48;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff4df;
+}
+
+.zoom-controls button {
+  border: 0;
+  background: transparent;
+  color: #5c3818;
+  font-weight: 700;
+  min-width: 2rem;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.zoom-controls button + button {
+  border-left: 1px solid #d9bf8f;
+}
+
+.zoom-controls button:hover:not(:disabled) {
+  background: #ffe9c3;
+}
+
+.zoom-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.zoom-controls .zoom-value {
+  min-width: 3.2rem;
+  font-size: 0.85rem;
+}
+
+.pseudo-full-view {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  margin: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tree-wrapper {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 640px) {
+  .tree-wrapper {
+    border-width: 6px;
+    padding: 0.9rem 0.6rem 1.2rem;
+    background-size:
+      80px 80px,
+      80px 80px,
+      80px 80px,
+      80px 80px,
+      auto,
+      480px 480px,
+      auto;
+  }
+
+  .view-controls {
+    gap: 0.45rem;
+  }
+
+  .control-buttons {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .search-box {
+    order: 2;
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .search-input {
+    font-size: 16px; /* prevents iOS zoom on focus */
+  }
+
+  .search-toggle-btn,
+  .full-view-btn {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.85rem;
+  }
+
+  .detail-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
 }
 </style>
