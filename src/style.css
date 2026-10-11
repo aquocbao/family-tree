@@ -1,0 +1,37 @@
+:root {
+  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #2f2a20;
+  background-color: #efe0c6;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(143, 96, 46, 0.14), transparent 42%),
+    radial-gradient(circle at 82% 76%, rgba(143, 96, 46, 0.11), transparent 45%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(120, 83, 43, 0.05) 0,
+      rgba(120, 83, 43, 0.05) 1px,
+      transparent 1px,
+      transparent 24px
+    ),
+    linear-gradient(135deg, #f4e8d3 0%, #ead9bc 52%, #e0cbab 100%);
+}
+
+#app {
+  min-height: 100vh;
+}

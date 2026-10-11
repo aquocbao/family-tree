@@ -1,0 +1,138 @@
+{
+  "members": [
+    {
+      "id": "PVL1",
+      "name": "PHẠM VĂN LƯƠNG",
+      "gender": "male",
+      "spouseId": "NTB2",
+      "isHidden": false
+    },
+    {
+      "id": "NTB2",
+      "name": "NGUYỄN THỊ BÔNG",
+      "gender": "female",
+      "spouseId": "PVL1"
+    },
+    {
+      "id": "PTN",
+      "name": "PHẠM THỊ NHUNG",
+      "position": 2,
+      "gender": "female",
+      "fatherId": "PVL1",
+      "motherId": "NTB2"
+    },
+    {
+      "id": "PTT",
+      "name": "PHẠM THỊ THƠ",
+      "position": 4,
+      "gender": "female",
+      "fatherId": "PVL1",
+      "motherId": "NTB2"
+    },
+    {
+      "id": "PVD",
+      "name": "PHẠM VĂN ĐEN",
+      "position": 5,
+      "gender": "male",
+      "fatherId": "PVL1",
+      "motherId": "NTB2"
+    },
+    {
+      "id": "PNA",
+      "name": "PHẠM NGỌC ANH",
+      "position": 7,
+      "gender": "female",
+      "fatherId": "PVL1",
+      "motherId": "NTB2"
+    },
+    {
+      "id": "PCH",
+      "name": "PHẠM CÔNG HÙNG",
+      "position": 8,
+      "gender": "male",
+      "fatherId": "PVL1",
+      "motherId": "NTB2"
+    },
+    {
+      "id": "PVT",
+      "name": "PHẠM VĂN TIẾN",
+      "position": 10,
+      "gender": "male",
+      "fatherId": "PVL1",
+      "motherId": "NTB2"
+    },
+    {
+      "id": "PTC",
+      "name": "PHẠM THÀNH CÔNG",
+      "position": 11,
+      "gender": "male",
+      "fatherId": "PVL1",
+      "motherId": "NTB2",
+      "spouseId": "VTML"
+    },
+    {
+      "id": "PQB",
+      "name": "PHẠM QUỐC BẢO",
+      "position": 2,
+      "birthDate": "1992-01-24",
+      "gender": "male",
+      "fatherId": "PTC",
+      "motherId": "VTML",
+      "spouseId": "TNG"
+    },
+    {
+      "id": "VTML",
+      "name": "VÕ THỊ MỸ LINH",
+      "birthDate": "1972-11-02",
+      "gender": "female",
+      "spouseId": "PTC"
+    },
+    {
+      "id": "PVNT",
+      "name": "PHẠM VÕ NGỌC THÙY",
+      "position": 3,
+      "gender": "female",
+      "fatherId": "PTC",
+      "motherId": "VTML",
+      "spouseId": "NHQ"
+    },
+    {
+      "id": "PQD",
+      "name": "PHẠM QUỐC ĐẠI",
+      "position": 4,
+      "birthDate": "2009-09-09",
+      "gender": "other",
+      "fatherId": "PTC",
+      "motherId": "VTML"
+    },
+    {
+      "id": "TNG",
+      "name": "THI NGỌC GIÀU",
+      "birthDate": "1992-07-04",
+      "gender": "female",
+      "spouseId": "PQB"
+    },
+    {
+      "id": "NHQ",
+      "name": "NGUYỄN HỒNG QUÂN",
+      "gender": "other",
+      "spouseId": "PVNT",
+      "spouseOnRight": true
+    },
+    {
+      "id": "PTPT",
+      "name": "PHẠM THI PHƯƠNG THẢO",
+      "position": 2,
+      "birthDate": "2025-12-20",
+      "gender": "female",
+      "fatherId": "PQB",
+      "motherId": "TNG"
+    }
+  ],
+  "settings": {
+    "showBirthDate": true,
+    "showDeathDate": true,
+    "showSpouse": true,
+    "showViewDetail": true
+  }
+}
