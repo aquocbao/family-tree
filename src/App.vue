@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ADMIN_PATH, SUPER_ADMIN_PATH } from './admin-paths'
 import FamilyTree from './components/FamilyTree.vue'
@@ -186,6 +186,42 @@ const startAddMember = (): void => {
   resetForm()
 }
 
+const editorPanelRef = ref<HTMLElement | null>(null)
+const nameInputRef = ref<HTMLInputElement | null>(null)
+const isEditorFlashing = ref(false)
+let editorFlashTimer: ReturnType<typeof setTimeout> | undefined
+
+// Bring the edit panel into view and put the cursor in the name field.
+const focusEditorPanel = async (): Promise<void> => {
+  if (document.fullscreenElement) {
+    try {
+      await document.exitFullscreen()
+    } catch {
+      // Ignore: still try to scroll to the panel.
+    }
+  }
+
+  await nextTick()
+  const panel = editorPanelRef.value
+  if (!panel) {
+    return
+  }
+
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  nameInputRef.value?.focus({ preventScroll: true })
+  nameInputRef.value?.select()
+
+  isEditorFlashing.value = false
+  await nextTick()
+  isEditorFlashing.value = true
+  if (editorFlashTimer) {
+    clearTimeout(editorFlashTimer)
+  }
+  editorFlashTimer = setTimeout(() => {
+    isEditorFlashing.value = false
+  }, 1600)
+}
+
 const startEditMember = (id: string): void => {
   if (!isEditableMode.value) {
     return
@@ -212,6 +248,7 @@ const startEditMember = (id: string): void => {
   isEditing.value = true
   editingId.value = member.id
   formError.value = ''
+  void focusEditorPanel()
 }
 
 const normalizeMember = (member: FamilyMember): FamilyMember => {
@@ -745,7 +782,11 @@ onMounted(async () => {
     </section>
 
     <div v-if="isEditableMode" class="admin-panels">
-      <section class="editor-panel">
+      <section
+        ref="editorPanelRef"
+        class="editor-panel"
+        :class="{ 'editor-panel--flash': isEditorFlashing }"
+      >
         <h2>{{ isEditing ? 'Chỉnh sửa thành viên' : 'Thêm thành viên' }}</h2>
 
         <form class="member-form" @submit.prevent="saveMember">
@@ -756,7 +797,7 @@ onMounted(async () => {
 
         <label>
           Tên
-          <input v-model="form.name" type="text" required :disabled="isSaving" />
+          <input ref="nameInputRef" v-model="form.name" type="text" required :disabled="isSaving" />
         </label>
 
         <label>
@@ -1055,6 +1096,24 @@ onMounted(async () => {
   border: 1px solid #d7dbe6;
   border-radius: 16px;
   padding: 1rem;
+}
+
+.editor-panel {
+  scroll-margin-top: 16px;
+}
+
+.editor-panel--flash {
+  animation: editor-panel-flash 1.6s ease-out;
+}
+
+@keyframes editor-panel-flash {
+  0%,
+  40% {
+    box-shadow: 0 0 0 4px rgba(201, 162, 74, 0.85);
+  }
+  100% {
+    box-shadow: 0 0 0 4px rgba(201, 162, 74, 0);
+  }
 }
 
 .editor-panel h2 {

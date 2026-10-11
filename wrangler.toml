@@ -10,10 +10,8 @@ binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
 
-# Storage for edits. Until this is set up, the site loads the bundled src/data/family-db.json
-# and saving returns an error. To enable saving:
-#   1. npx wrangler kv namespace create FAMILY_DB_KV   (or Dashboard → Storage & Databases → KV → Create)
-#   2. Uncomment the 3 lines below and paste the namespace id.
-# [[kv_namespaces]]
-# binding = "FAMILY_DB_KV"
-# id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
+# Storage for edits (Workers KV namespace "FAMILY_DB_KV").
+# Until the first save, the site loads the bundled src/data/family-db.json.
+[[kv_namespaces]]
+binding = "FAMILY_DB_KV"
+id = "20dc6446176d445fa17b4ea606838d77"

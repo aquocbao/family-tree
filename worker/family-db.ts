@@ -91,7 +91,7 @@ export const onRequestGet = async ({ env }: Context): Promise<Response> => {
 export const onRequestPut = async ({ request, env }: Context): Promise<Response> => {
   if (!env.FAMILY_DB_KV) {
     return json(501, {
-      error: 'Chưa cấu hình lưu trữ: hãy bind KV namespace với tên FAMILY_DB_KV trong Cloudflare Pages.',
+      error: 'Chưa cấu hình lưu trữ: hãy tạo KV namespace và khai báo binding FAMILY_DB_KV trong wrangler.toml.',
     })
   }
 
