@@ -1,0 +1,9 @@
+name = "family-tree"
+compatibility_date = "2026-09-01"
+pages_build_output_dir = "./dist"
+
+# Create the namespace with:  npx wrangler kv namespace create FAMILY_DB_KV
+# then paste the returned id below.
+[[kv_namespaces]]
+binding = "FAMILY_DB_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
