@@ -12,6 +12,7 @@ type RawMember = {
   position?: unknown
   birthDate?: unknown
   deathDate?: unknown
+  deathDateLunar?: unknown
   gender?: unknown
   fatherId?: unknown
   motherId?: unknown
@@ -90,6 +91,7 @@ const isValidMember = (value: unknown): value is RawMember => {
     isOptionalNonNegativeInteger(member.position) &&
     isOptionalString(member.birthDate) &&
     isOptionalString(member.deathDate) &&
+    isOptionalString(member.deathDateLunar) &&
     isOptionalString(member.fatherId) &&
     isOptionalString(member.motherId) &&
     isOptionalString(member.spouseId) &&

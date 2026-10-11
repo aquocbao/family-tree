@@ -6,6 +6,8 @@ export interface FamilyMember {
   position?: number
   birthDate?: string
   deathDate?: string
+  /** Lunar death date as entered by admin (free text). Empty → computed from deathDate. */
+  deathDateLunar?: string
   gender: FamilyGender
   fatherId?: string
   motherId?: string

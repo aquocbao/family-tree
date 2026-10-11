@@ -102,7 +102,7 @@
       "name": "PHẠM QUỐC ĐẠI",
       "position": 4,
       "birthDate": "2009-09-09",
-      "gender": "other",
+      "gender": "male",
       "fatherId": "PTC",
       "motherId": "VTML"
     },
@@ -116,7 +116,7 @@
     {
       "id": "NHQ",
       "name": "NGUYỄN HỒNG QUÂN",
-      "gender": "other",
+      "gender": "male",
       "spouseId": "PVNT",
       "spouseOnRight": true
     },

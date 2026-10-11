@@ -36,6 +36,7 @@ const isValidMember = (value: unknown): boolean => {
       (typeof m.position === 'number' && Number.isInteger(m.position) && m.position >= 0)) &&
     isOptionalString(m.birthDate) &&
     isOptionalString(m.deathDate) &&
+    isOptionalString(m.deathDateLunar) &&
     isOptionalString(m.fatherId) &&
     isOptionalString(m.motherId) &&
     isOptionalString(m.spouseId) &&

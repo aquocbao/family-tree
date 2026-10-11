@@ -5,6 +5,7 @@ import { ADMIN_PATH, SUPER_ADMIN_PATH } from './admin-paths'
 import FamilyTree from './components/FamilyTree.vue'
 import SearchableMemberSelect from './components/SearchableMemberSelect.vue'
 import { fetchFamilyDatabase, saveFamilyDatabase } from './data/family-db-api'
+import { solarDateTextToLunarText } from './utils/lunar'
 import type { FamilyDatabase, FamilyGender, FamilyMember, FamilyTreeSettings } from './types/family'
 
 type MemberForm = {
@@ -13,6 +14,7 @@ type MemberForm = {
   position: string
   birthDate: string
   deathDate: string
+  deathDateLunar: string
   gender: FamilyGender
   fatherId: string
   motherId: string
@@ -42,6 +44,7 @@ const emptyForm = (): MemberForm => ({
   position: '',
   birthDate: '',
   deathDate: '',
+  deathDateLunar: '',
   gender: 'other',
   fatherId: '',
   motherId: '',
@@ -238,6 +241,7 @@ const startEditMember = (id: string): void => {
     position: member.position !== undefined ? String(member.position) : '',
     birthDate: formatDateForAdmin(member.birthDate),
     deathDate: formatDateForAdmin(member.deathDate),
+    deathDateLunar: member.deathDateLunar ?? '',
     gender: member.gender,
     fatherId: member.fatherId ?? '',
     motherId: member.motherId ?? '',
@@ -257,6 +261,7 @@ const normalizeMember = (member: FamilyMember): FamilyMember => {
     position: member.position ?? undefined,
     birthDate: member.birthDate ?? undefined,
     deathDate: member.deathDate ?? undefined,
+    deathDateLunar: member.deathDateLunar ?? undefined,
     fatherId: member.fatherId ?? undefined,
     motherId: member.motherId ?? undefined,
     spouseId: member.spouseId ?? undefined,
@@ -409,6 +414,12 @@ const validateForm = (): boolean => {
   return true
 }
 
+// Lunar date computed from the solar death date in the form (used as hint/placeholder).
+const autoLunarDeathDate = computed(() => {
+  const iso = parseAdminDateToIso(form.value.deathDate)
+  return iso ? solarDateTextToLunarText(iso) : ''
+})
+
 const formatDateInputField = (field: 'birthDate' | 'deathDate'): void => {
   const currentValue = form.value[field]
   const iso = parseAdminDateToIso(currentValue)
@@ -481,6 +492,7 @@ const saveMember = async (): Promise<void> => {
     position: positionText ? Number(positionText) : undefined,
     birthDate: birthIso,
     deathDate: deathIso,
+    deathDateLunar: form.value.deathDateLunar.trim() || undefined,
     gender: form.value.gender,
     fatherId: form.value.fatherId || undefined,
     motherId: form.value.motherId || undefined,
@@ -722,8 +734,8 @@ onMounted(async () => {
 <template>
   <main class="app">
     <header class="app-header">
-      <h1>PHẠM GIA</h1>
-      <h2>范氏家谱</h2>
+      <h1>范氏家谱</h1>
+      <h2>PHẠM THỊ</h2>
     </header>
 
     <section v-if="isEditableMode" class="mode-panel">
@@ -834,6 +846,23 @@ onMounted(async () => {
             :disabled="isSaving"
             @blur="formatDateInputField('deathDate')"
           />
+        </label>
+
+        <label>
+          Ngày mất (âm lịch)
+          <input
+            v-model="form.deathDateLunar"
+            type="text"
+            :placeholder="autoLunarDeathDate ? `Tự tính: ${autoLunarDeathDate}` : 'Ví dụ: 15-03-2024 hoặc 15 tháng 3 năm Giáp Thìn'"
+            :disabled="isSaving"
+          />
+          <small class="field-hint">
+            {{
+              autoLunarDeathDate
+                ? 'Để trống để dùng ngày âm lịch tự tính từ ngày mất.'
+                : 'Nhập khi chỉ biết ngày giỗ âm lịch.'
+            }}
+          </small>
         </label>
 
         <label>
@@ -986,21 +1015,25 @@ onMounted(async () => {
 }
 
 .app-header h1 {
-  margin: 0 0 0.25rem;
-  font-family: 'Noto Serif', Georgia, serif;
-  font-weight: 700;
-  letter-spacing: 0.35em;
-  font-size: clamp(1.75rem, 3.5vw, 2.6rem);
+  margin: 0 0 0.15rem;
+  font-family: 'Ma Shan Zheng', 'KaiTi', 'STKaiti', serif;
+  font-weight: 400;
+  font-size: clamp(2.2rem, 4.5vw, 3.2rem);
+  line-height: 1.2;
+  letter-spacing: 0.25em;
+  text-indent: 0.25em;
+  color: #f6e2a8;
   text-shadow: 0 2px 0 rgba(40, 8, 4, 0.55);
 }
 
 .app-header h2 {
   margin: 0;
-  font-family: 'Ma Shan Zheng', 'KaiTi', 'STKaiti', serif;
-  font-weight: 400;
-  font-size: clamp(1.6rem, 3vw, 2.3rem);
-  letter-spacing: 0.2em;
-  color: #f6e2a8;
+  font-family: 'Noto Serif', Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(1rem, 2vw, 1.3rem);
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  color: #f1d48a;
 }
 
 .app-header p {
@@ -1262,12 +1295,15 @@ onMounted(async () => {
   }
 
   .app-header h1 {
-    letter-spacing: 0.2em;
-    font-size: 1.6rem;
+    font-size: 2rem;
+    letter-spacing: 0.18em;
+    text-indent: 0.18em;
   }
 
   .app-header h2 {
-    font-size: 1.5rem;
+    font-size: 0.95rem;
+    letter-spacing: 0.22em;
+    text-indent: 0.22em;
   }
 
   .mode-panel,
@@ -1299,5 +1335,11 @@ onMounted(async () => {
   .form-actions {
     flex-wrap: wrap;
   }
+}
+
+.field-hint {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: #7a6a55;
 }
 </style>

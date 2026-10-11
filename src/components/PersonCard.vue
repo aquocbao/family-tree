@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { FamilyMember } from '../types/family'
+import { solarDateTextToLunarText } from '../utils/lunar'
 
 const props = withDefaults(
   defineProps<{
@@ -61,6 +62,10 @@ const canShowSpouse = computed(() => {
   return props.showSpouse && hasBothParents && Boolean(props.spouseName)
 })
 
+const lunarDeathDate = computed(
+  () => props.member.deathDateLunar?.trim() || solarDateTextToLunarText(props.member.deathDate),
+)
+
 const formatDate = (value?: string): string => {
   if (!value) {
     return '—'
@@ -89,10 +94,34 @@ const formatDate = (value?: string): string => {
       <h3>Đã ẩn thông tin</h3>
     </template>
     <template v-else>
+      <div class="avatar" :class="`avatar--${genderClass}`" role="img" :aria-label="genderLabel" :title="genderLabel">
+        <img
+          v-if="member.gender === 'male' || member.gender === 'female'"
+          :src="member.gender === 'male' ? '/avatar/male-avatar.png' : '/avatar/female-avatar.png'"
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          decoding="async"
+        />
+        <svg v-else viewBox="0 0 64 64" aria-hidden="true">
+          <!-- "Khác": neutral figure (khăn xếp, áo the in brown) -->
+          <g transform="translate(-6.4 -8) scale(1.2)">
+            <path d="M8 64c1-11 9-17 24-18c15 1 23 7 24 18z" fill="#5b4a3a" />
+            <path d="M26.5 45.5h11v3.2c-1.6 1-3.6 1.5-5.5 1.5s-3.9-.5-5.5-1.5z" fill="#f3ead6" />
+            <path d="M32 50v14" stroke="#c9a24a" stroke-width="0.9" />
+            <circle cx="34.6" cy="53" r="0.9" fill="#c9a24a" />
+            <circle cx="34.6" cy="57.5" r="0.9" fill="#c9a24a" />
+            <rect x="29" y="37" width="6" height="9" rx="2.5" fill="#e9c39e" />
+            <ellipse cx="32" cy="30" rx="8.6" ry="10" fill="#f2d3b3" />
+            <path d="M22.6 27.5c-.6-7.8 3.7-12.3 9.4-12.3s10 4.5 9.4 12.3c-2.8-1.3-6-2-9.4-2s-6.6.7-9.4 2z" fill="#262321" />
+            <path d="M23.2 24.3c2.7-1.2 5.7-1.8 8.8-1.8s6.1.6 8.8 1.8M23.9 21.2c2.5-1 5.2-1.5 8.1-1.5s5.6.5 8.1 1.5M25.6 18.3c2-.8 4.2-1.2 6.4-1.2s4.4.4 6.4 1.2" stroke="#56504a" stroke-width="1" fill="none" />
+          </g>
+        </svg>
+      </div>
       <h3>{{ member.name }}</h3>
       <p v-if="showBirthDate"><strong>Ngày sinh:</strong> {{ formatDate(member.birthDate) }}</p>
-      <p v-if="showDeathDate"><strong>Ngày mất:</strong> {{ formatDate(member.deathDate) }}</p>
-      <p><strong>Giới tính:</strong> {{ genderLabel }}</p>
+      <p v-if="showDeathDate && member.deathDate"><strong>Ngày mất:</strong> {{ formatDate(member.deathDate) }}</p>
+      <p v-if="showDeathDate && lunarDeathDate"><strong>Ngày mất (âm lịch):</strong> {{ lunarDeathDate }}</p>
       <p v-if="canShowSpouse"><strong>Vợ/Chồng:</strong> {{ spouseName }}</p>
     </template>
 
@@ -234,6 +263,12 @@ const formatDate = (value?: string): string => {
 }
 
 @media (max-width: 640px) {
+  .avatar {
+    width: 42px;
+    height: 42px;
+    margin-bottom: 0.35rem;
+  }
+
   .person-card {
     width: 150px;
     max-width: 150px;
@@ -262,5 +297,43 @@ const formatDate = (value?: string): string => {
     font-size: 0.72rem;
     border-radius: 6px;
   }
+}
+
+/* Person avatar at the top of each card */
+.avatar {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 0.5rem;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #c9a24a;
+  box-shadow: 0 0 0 3px #fffaf0, 0 2px 6px rgba(60, 25, 8, 0.2);
+}
+
+.avatar svg,
+.avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.avatar img {
+  object-fit: cover;
+}
+
+.avatar--male {
+  background: #dbe4ef;
+}
+
+.avatar--female {
+  background: #f6dfe2;
+}
+
+.avatar--other {
+  background: #ece6da;
+}
+
+.person-card h3 {
+  text-align: center;
 }
 </style>
