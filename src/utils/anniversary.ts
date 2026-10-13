@@ -116,3 +116,61 @@ export const formatSolarDate = (date: Date): string =>
 
 const WEEKDAYS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
 export const weekdayName = (date: Date): string => WEEKDAYS[date.getDay()]
+
+// ---- Lunar calendar festivals (Lễ, Tết) ----
+export interface LunarEvent {
+  name: string
+  day: number
+  month: number
+  /** Last day of the lunar month (29 or 30), e.g. Giao thừa. */
+  lastDayOfMonth?: boolean
+}
+
+export const LUNAR_EVENTS: LunarEvent[] = [
+  { name: 'Mồng 1 Tết Nguyên Đán', day: 1, month: 1 },
+  { name: 'Mồng 2 Tết Nguyên Đán', day: 2, month: 1 },
+  { name: 'Mồng 3 Tết Nguyên Đán', day: 3, month: 1 },
+  { name: 'Rằm tháng Giêng (Tết Nguyên Tiêu)', day: 15, month: 1 },
+  { name: 'Giỗ Tổ Hùng Vương', day: 10, month: 3 },
+  { name: 'Tết Đoan Ngọ', day: 5, month: 5 },
+  { name: 'Lễ Vu Lan', day: 15, month: 7 },
+  { name: 'Tết Trung Thu', day: 15, month: 8 },
+  { name: 'Ông Công Ông Táo', day: 23, month: 12 },
+  { name: 'Giao thừa', day: 30, month: 12, lastDayOfMonth: true },
+]
+
+export interface UpcomingLunarEvent {
+  event: LunarEvent
+  date: Date
+  daysLeft: number
+  lunarDay: number
+  lunarMonth: number
+}
+
+/** Lunar festivals within the next `days` days (today included), nearest first. */
+export const getUpcomingLunarEvents = (today: Date = new Date(), days = 30): UpcomingLunarEvent[] => {
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const results: UpcomingLunarEvent[] = []
+  let next = lunarOf(start)
+  for (let offset = 0; offset <= days; offset += 1) {
+    const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset)
+    const lunar = next
+    next = lunarOf(new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset + 1))
+    if (lunar.leap) {
+      continue
+    }
+
+    for (const event of LUNAR_EVENTS) {
+      if (event.month !== lunar.month) {
+        continue
+      }
+
+      const matches = event.lastDayOfMonth ? next.day === 1 : lunar.day === event.day
+      if (matches) {
+        results.push({ event, date, daysLeft: offset, lunarDay: lunar.day, lunarMonth: lunar.month })
+      }
+    }
+  }
+
+  return results
+}
