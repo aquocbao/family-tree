@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import AnniversaryBar from './AnniversaryBar.vue'
 import FamilyTreeNode from './FamilyTreeNode.vue'
 import type { FamilyMember, FamilyUnit } from '../types/family'
 
@@ -582,6 +583,8 @@ onBeforeUnmount(() => {
     class="tree-wrapper"
     :class="{ 'full-view-active': isFullView, 'pseudo-full-view': isPseudoFullView }"
   >
+    <AnniversaryBar class="tree-anniversary" :members="members" :include-hidden="canManage" @select="goToMember" />
+
     <div class="view-controls">
       <div v-if="isSearchOpen" class="search-box">
         <input
@@ -922,6 +925,16 @@ onBeforeUnmount(() => {
 .tree-wrapper {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
+}
+
+/* Ngày giỗ notification, pinned at the top of the frame while the tree scrolls sideways */
+.tree-anniversary {
+  position: sticky;
+  left: 0;
+  top: 0;
+  z-index: 9;
+  margin: 0 0 0.8rem;
+  max-width: none;
 }
 
 /* ---------- Mobile ---------- */

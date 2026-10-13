@@ -122,7 +122,7 @@ const formatDate = (value?: string): string => {
       <p v-if="showBirthDate"><strong>Ngày sinh:</strong> {{ formatDate(member.birthDate) }}</p>
       <p v-if="showDeathDate && member.deathDate"><strong>Ngày mất:</strong> {{ formatDate(member.deathDate) }}</p>
       <p v-if="showDeathDate && lunarDeathDate"><strong>Ngày mất (âm lịch):</strong> {{ lunarDeathDate }}</p>
-      <p v-if="canShowSpouse" class="one-line"><strong>Vợ/Chồng:</strong> {{ spouseName }}</p>
+      <p v-if="canShowSpouse"><strong>Vợ/Chồng:</strong> {{ spouseName }}</p>
     </template>
 
     <div class="actions">
@@ -204,22 +204,15 @@ const formatDate = (value?: string): string => {
   white-space: nowrap;
 }
 
-/* Details and buttons follow the card width (set by the name) instead of widening it */
-.person-card p,
+/* Buttons follow the card width instead of widening it */
 .actions {
   width: 0;
   min-width: 100%;
 }
 
+/* Every field (label + value) stays on one line; the card widens to fit the longest one */
 .person-card p {
   margin: 0.25rem 0;
-  overflow-wrap: anywhere;
-}
-
-/* Vợ/Chồng stays on one line and may widen the card, like the name */
-.person-card p.one-line {
-  width: auto;
-  min-width: 0;
   white-space: nowrap;
 }
 
