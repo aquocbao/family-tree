@@ -1,6 +1,7 @@
 // Upcoming death anniversaries (ngày giỗ), observed by the lunar calendar.
 import type { FamilyMember } from '../types/family'
 import { solarToLunar } from './lunar'
+import { DEFAULT_LUNAR_EVENTS, type LunarEvent } from './lunar-events'
 
 export interface UpcomingAnniversary {
   member: FamilyMember
@@ -118,24 +119,7 @@ const WEEKDAYS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ n
 export const weekdayName = (date: Date): string => WEEKDAYS[date.getDay()]
 
 // ---- Lunar calendar festivals (Lễ, Tết) ----
-export interface LunarEvent {
-  name: string
-  day: number
-  month: number
-  /** Last day of the lunar month (29 or 30), e.g. Giao thừa. */
-  lastDayOfMonth?: boolean
-}
-
-export const LUNAR_EVENTS: LunarEvent[] = [
-  { name: 'Mồng 1 Tết Nguyên Đán', day: 1, month: 1 },
-  { name: 'Rằm tháng Giêng (Tết Nguyên Tiêu)', day: 15, month: 1 },
-  { name: 'Giỗ Tổ Hùng Vương', day: 10, month: 3 },
-  { name: 'Tết Đoan Ngọ', day: 5, month: 5 },
-  { name: 'Lễ Vu Lan', day: 15, month: 7 },
-  { name: 'Tết Trung Thu', day: 15, month: 8 },
-  { name: 'Ông Công Ông Táo', day: 23, month: 12 },
-  { name: 'Giao thừa', day: 30, month: 12, lastDayOfMonth: true },
-]
+export type { LunarEvent } from './lunar-events'
 
 export interface UpcomingLunarEvent {
   event: LunarEvent
@@ -146,7 +130,11 @@ export interface UpcomingLunarEvent {
 }
 
 /** Lunar festivals within the next `days` days (today included), nearest first. */
-export const getUpcomingLunarEvents = (today: Date = new Date(), days = 30): UpcomingLunarEvent[] => {
+export const getUpcomingLunarEvents = (
+  today: Date = new Date(),
+  days = 30,
+  events: LunarEvent[] = DEFAULT_LUNAR_EVENTS,
+): UpcomingLunarEvent[] => {
   const start = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   const results: UpcomingLunarEvent[] = []
   let next = lunarOf(start)
@@ -158,7 +146,7 @@ export const getUpcomingLunarEvents = (today: Date = new Date(), days = 30): Upc
       continue
     }
 
-    for (const event of LUNAR_EVENTS) {
+    for (const event of events) {
       if (event.month !== lunar.month) {
         continue
       }

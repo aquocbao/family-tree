@@ -6,6 +6,14 @@ import FamilyTree from './components/FamilyTree.vue'
 import SearchableMemberSelect from './components/SearchableMemberSelect.vue'
 import { fetchFamilyDatabase, saveFamilyDatabase } from './data/family-db-api'
 import { solarDateTextToLunarText } from './utils/lunar'
+import {
+  DEFAULT_LUNAR_EVENTS,
+  MAX_LUNAR_EVENTS,
+  MAX_LUNAR_EVENT_NAME,
+  cloneLunarEvents,
+  isValidLunarEvent,
+  type LunarEvent,
+} from './utils/lunar-events'
 import type { FamilyDatabase, FamilyGender, FamilyMember, FamilyTreeSettings } from './types/family'
 
 type MemberForm = {
@@ -34,6 +42,7 @@ const defaultTreeSettings = (): FamilyTreeSettings => ({
   showSpouse: true,
   showViewDetail: true,
   notificationMonths: 3,
+  lunarEvents: cloneLunarEvents(DEFAULT_LUNAR_EVENTS),
 })
 
 const approvedSettings = ref<FamilyTreeSettings>(defaultTreeSettings())
@@ -147,6 +156,7 @@ const showDeathDate = ref(true)
 const showSpouseInfo = ref(true)
 const showViewDetailAction = ref(true)
 const notificationMonths = ref(3)
+const lunarEvents = ref<LunarEvent[]>(cloneLunarEvents(DEFAULT_LUNAR_EVENTS))
 const hasLoadedDatabase = ref(false)
 const suppressSettingsSync = ref(false)
 const route = useRoute()
@@ -361,6 +371,12 @@ const applyTreeSettings = (settings: FamilyTreeSettings): void => {
   showSpouseInfo.value = settings.showSpouse
   showViewDetailAction.value = settings.showViewDetail
   notificationMonths.value = settings.notificationMonths ?? 3
+  const nextEvents = cloneLunarEvents(settings.lunarEvents ?? DEFAULT_LUNAR_EVENTS)
+  // Only replace the array when the content changed (a new array would re-trigger the settings watcher).
+  if (JSON.stringify(nextEvents) !== JSON.stringify(lunarEvents.value)) {
+    lunarEvents.value = nextEvents
+    resetLunarEventsDraft()
+  }
 }
 
 const getTreeSettings = (): FamilyTreeSettings => ({
@@ -369,6 +385,7 @@ const getTreeSettings = (): FamilyTreeSettings => ({
   showSpouse: showSpouseInfo.value,
   showViewDetail: showViewDetailAction.value,
   notificationMonths: notificationMonths.value,
+  lunarEvents: cloneLunarEvents(lunarEvents.value),
 })
 
 const applyLoadedState = (database: FamilyDatabase): void => {
@@ -787,9 +804,9 @@ watch(isEditableMode, (currentMode) => {
   }
 })
 
-watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notificationMonths], async (
-  [nextBirthDate, nextDeathDate, nextSpouse, nextDetail, nextMonths],
-  [previousBirthDate, previousDeathDate, previousSpouse, previousDetail, previousMonths],
+watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notificationMonths, lunarEvents], async (
+  [nextBirthDate, nextDeathDate, nextSpouse, nextDetail, nextMonths, nextEvents],
+  [previousBirthDate, previousDeathDate, previousSpouse, previousDetail, previousMonths, previousEvents],
 ) => {
   if (
     suppressSettingsSync.value ||
@@ -800,7 +817,8 @@ watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notif
       nextDeathDate === previousDeathDate &&
       nextSpouse === previousSpouse &&
       nextDetail === previousDetail &&
-      nextMonths === previousMonths
+      nextMonths === previousMonths &&
+      JSON.stringify(nextEvents) === JSON.stringify(previousEvents)
     )
   ) {
     return
@@ -814,6 +832,7 @@ watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notif
       showSpouse: nextSpouse,
       showViewDetail: nextDetail,
       notificationMonths: nextMonths,
+      lunarEvents: cloneLunarEvents(nextEvents),
     },
   )
   if (!saved) {
@@ -823,9 +842,78 @@ watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notif
     showSpouseInfo.value = previousSpouse
     showViewDetailAction.value = previousDetail
     notificationMonths.value = previousMonths
+    lunarEvents.value = previousEvents
+    resetLunarEventsDraft()
     suppressSettingsSync.value = false
+  } else if (JSON.stringify(nextEvents) !== JSON.stringify(previousEvents)) {
+    lunarEventsMessage.value = 'Đã lưu danh sách Lễ Tết.'
   }
 })
+
+// ---- Lễ Tết editor (draft; saved with the "Lưu danh sách" button) ----
+type LunarEventDraft = { name: string; day: number | string; month: number | string; lastDayOfMonth: boolean }
+const lunarEventsDraft = ref<LunarEventDraft[]>([])
+const lunarEventsError = ref('')
+const lunarEventsMessage = ref('')
+
+function resetLunarEventsDraft(): void {
+  lunarEventsDraft.value = lunarEvents.value.map((e) => ({
+    name: e.name,
+    day: e.day,
+    month: e.month,
+    lastDayOfMonth: Boolean(e.lastDayOfMonth),
+  }))
+  lunarEventsError.value = ''
+}
+
+resetLunarEventsDraft()
+
+const lunarEventsDirty = computed(() => {
+  const draft = lunarEventsDraft.value.map((e) => [e.name.trim(), Number(e.day), Number(e.month), e.lastDayOfMonth])
+  const saved = lunarEvents.value.map((e) => [e.name, e.day, e.month, Boolean(e.lastDayOfMonth)])
+  return JSON.stringify(draft) !== JSON.stringify(saved)
+})
+
+const addLunarEvent = (): void => {
+  lunarEventsMessage.value = ''
+  lunarEventsDraft.value.push({ name: '', day: 1, month: 1, lastDayOfMonth: false })
+}
+
+const removeLunarEvent = (index: number): void => {
+  lunarEventsMessage.value = ''
+  lunarEventsDraft.value.splice(index, 1)
+}
+
+const restoreDefaultLunarEvents = (): void => {
+  lunarEventsMessage.value = ''
+  lunarEventsDraft.value = DEFAULT_LUNAR_EVENTS.map((e) => ({
+    name: e.name,
+    day: e.day,
+    month: e.month,
+    lastDayOfMonth: Boolean(e.lastDayOfMonth),
+  }))
+}
+
+const saveLunarEvents = (): void => {
+  lunarEventsMessage.value = ''
+  const next: LunarEvent[] = lunarEventsDraft.value.map((e) => ({
+    name: e.name.trim(),
+    day: e.lastDayOfMonth ? 30 : Number(e.day),
+    month: Number(e.month),
+    ...(e.lastDayOfMonth ? { lastDayOfMonth: true } : {}),
+  }))
+  const invalidIndex = next.findIndex((e) => !isValidLunarEvent(e))
+  if (invalidIndex !== -1) {
+    lunarEventsError.value = `Dòng ${invalidIndex + 1}: cần tên (tối đa ${MAX_LUNAR_EVENT_NAME} ký tự), ngày 1–30 và tháng 1–12.`
+    return
+  }
+  if (next.length > MAX_LUNAR_EVENTS) {
+    lunarEventsError.value = `Tối đa ${MAX_LUNAR_EVENTS} sự kiện.`
+    return
+  }
+  lunarEventsError.value = ''
+  lunarEvents.value = next // the settings watcher saves it (pending → super admin approval)
+}
 
 onMounted(async () => {
   await loadMembers()
@@ -1094,6 +1182,50 @@ onMounted(async () => {
 
           </select>
         </label>
+
+        <div class="lunar-events-editor">
+          <h3>Lễ Tết trên thanh thông báo (âm lịch)</h3>
+          <div class="lunar-events-head" aria-hidden="true">
+            <span>Tên</span><span>Ngày</span><span>Tháng</span><span>Cuối tháng</span><span></span>
+          </div>
+          <div v-for="(event, index) in lunarEventsDraft" :key="index" class="lunar-event-row">
+            <input
+              v-model="event.name"
+              type="text"
+              class="lunar-event-name"
+              :maxlength="MAX_LUNAR_EVENT_NAME"
+              placeholder="Tên sự kiện"
+              aria-label="Tên sự kiện"
+            />
+            <input
+              v-model.number="event.day"
+              type="number"
+              min="1"
+              max="30"
+              :disabled="event.lastDayOfMonth"
+              aria-label="Ngày âm lịch"
+            />
+            <input v-model.number="event.month" type="number" min="1" max="12" aria-label="Tháng âm lịch" />
+            <label class="lunar-event-last" title="Ngày cuối tháng (29 hoặc 30), ví dụ Giao thừa">
+              <input v-model="event.lastDayOfMonth" type="checkbox" />
+              <span class="lunar-event-last-text">Cuối tháng</span>
+            </label>
+            <button type="button" class="lunar-event-remove" aria-label="Xóa sự kiện" @click="removeLunarEvent(index)">✕</button>
+          </div>
+          <p v-if="lunarEventsDraft.length === 0" class="settings-help">Chưa có sự kiện nào.</p>
+          <div class="lunar-events-actions">
+            <button type="button" class="lunar-btn" :disabled="lunarEventsDraft.length >= MAX_LUNAR_EVENTS" @click="addLunarEvent">
+              + Thêm sự kiện
+            </button>
+            <button type="button" class="lunar-btn" @click="restoreDefaultLunarEvents">Khôi phục mặc định</button>
+            <button type="button" class="lunar-btn" :disabled="!lunarEventsDirty" @click="resetLunarEventsDraft">Hủy thay đổi</button>
+            <button type="button" class="lunar-btn lunar-btn--primary" :disabled="!lunarEventsDirty || isSaving" @click="saveLunarEvents">
+              Lưu danh sách
+            </button>
+          </div>
+          <p v-if="lunarEventsError" class="download-error">{{ lunarEventsError }}</p>
+          <p v-else-if="lunarEventsMessage" class="lunar-events-message">{{ lunarEventsMessage }}</p>
+        </div>
       </section>
     </div>
 
@@ -1108,6 +1240,7 @@ onMounted(async () => {
       :show-spouse="showSpouseInfo"
       :show-view-detail="showViewDetailAction"
       :notification-months="notificationMonths"
+      :lunar-events="lunarEvents"
       @edit-member="startEditMember"
       @delete-member="deleteMember"
       @toggle-member-hidden="toggleMemberHidden"
@@ -1520,6 +1653,101 @@ onMounted(async () => {
   background: #fff;
 }
 
+.lunar-events-editor {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px dashed #d9c6a3;
+}
+
+.lunar-events-editor h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: #23345d;
+}
+
+.lunar-events-head,
+.lunar-event-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.2rem 4.2rem 6.2rem 2rem;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.lunar-events-head {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #6b5a44;
+  margin-bottom: 0.25rem;
+}
+
+.lunar-event-row {
+  margin-bottom: 0.35rem;
+}
+
+.lunar-event-row input[type='text'],
+.lunar-event-row input[type='number'] {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #becce8;
+  border-radius: 6px;
+  padding: 0.3rem 0.45rem;
+  font: inherit;
+}
+
+.lunar-event-row input:disabled {
+  background: #f2f2f2;
+  color: #999;
+}
+
+.lunar-event-last {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.lunar-event-remove {
+  border: 1px solid #e3b4b4;
+  border-radius: 6px;
+  background: #fff5f5;
+  color: #8f1d1d;
+  cursor: pointer;
+  height: 1.9rem;
+}
+
+.lunar-events-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.lunar-btn {
+  border: 1px solid #8ca7de;
+  border-radius: 8px;
+  background: #fff;
+  color: #2f4678;
+  font-weight: 600;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+
+.lunar-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.lunar-btn--primary {
+  background: #2f4678;
+  color: #fff;
+}
+
+.lunar-events-message {
+  margin: 0.4rem 0 0;
+  color: #2f6b2f;
+  font-weight: 600;
+}
+
 /* ---------- Mobile ---------- */
 @media (max-width: 640px) {
   .app {
@@ -1572,12 +1800,28 @@ onMounted(async () => {
   /* 16px inputs stop iOS Safari from zooming in on focus */
   .member-form input,
   .member-form select,
-  .setting-select select {
+  .setting-select select,
+  .lunar-event-row input[type='text'],
+  .lunar-event-row input[type='number'] {
     font-size: 16px;
   }
 
   .form-actions {
     flex-wrap: wrap;
+  }
+
+  .lunar-events-head {
+    display: none;
+  }
+
+  .lunar-event-row {
+    grid-template-columns: minmax(0, 1fr) 3.4rem 3.4rem 2rem 2rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px dotted #e3d6bd;
+  }
+
+  .lunar-event-last-text {
+    display: none;
   }
 }
 

@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import type { IncomingMessage } from 'node:http'
 import { APPROVE_KEY, DOWNLOAD_KEY } from './src/admin-paths'
+import { DEFAULT_LUNAR_EVENTS, isValidLunarEventList } from './src/utils/lunar-events'
 
 const dbFilePath = path.resolve(import.meta.dirname, 'src/data/family-db.json')
 
@@ -29,6 +30,7 @@ type RawSettings = {
   showViewDetail?: unknown
   showDateInfo?: unknown
   notificationMonths?: unknown
+  lunarEvents?: unknown
 }
 
 const createDefaultDatabase = (): {
@@ -122,7 +124,8 @@ const isValidSettings = (value: unknown): value is RawSettings => {
       (typeof settings.notificationMonths === 'number' &&
         Number.isInteger(settings.notificationMonths) &&
         settings.notificationMonths >= 0 &&
-        settings.notificationMonths <= 12))
+        settings.notificationMonths <= 12)) &&
+    (settings.lunarEvents === undefined || isValidLunarEventList(settings.lunarEvents))
   )
 }
 
@@ -153,6 +156,7 @@ const withDefaultSettings = (value: unknown): Record<string, unknown> => {
     showSpouse: s.showSpouse ?? true,
     showViewDetail: s.showViewDetail ?? true,
     notificationMonths: s.notificationMonths ?? 3,
+    lunarEvents: s.lunarEvents ?? DEFAULT_LUNAR_EVENTS,
   }
 }
 

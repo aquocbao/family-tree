@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { FamilyMember } from '../types/family'
+import type { LunarEvent } from '../utils/lunar-events'
 import { formatSolarDate, getUpcomingAnniversaries, getUpcomingLunarEvents, weekdayName } from '../utils/anniversary'
 
 const props = withDefaults(
@@ -15,6 +16,8 @@ const props = withDefaults(
     eventLimit?: number
     /** Only show ngày giỗ / festivals within this many months from today. */
     months?: number
+    /** Lễ Tết list (admin-editable). Missing = default list. */
+    lunarEvents?: LunarEvent[]
   }>(),
   { includeHidden: false, soonDays: 14, limit: 5, eventLimit: 5, months: 4 },
 )
@@ -39,7 +42,7 @@ const upcoming = computed(() =>
   ).slice(0, props.limit),
 )
 
-const upcomingEvents = computed(() => getUpcomingLunarEvents(new Date(), windowDays.value).slice(0, props.eventLimit))
+const upcomingEvents = computed(() => getUpcomingLunarEvents(new Date(), windowDays.value, props.lunarEvents).slice(0, props.eventLimit))
 
 // One list for the ticker: ngày giỗ and festivals, nearest first.
 type TickerItem =

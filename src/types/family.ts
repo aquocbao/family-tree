@@ -1,3 +1,5 @@
+import type { LunarEvent } from '../utils/lunar-events'
+
 export type FamilyGender = 'female' | 'male' | 'other'
 
 export interface FamilyMember {
@@ -36,5 +38,7 @@ export interface FamilyTreeSettings {
   showViewDetail: boolean
   /** Notification bar: show ngày giỗ / Lễ Tết within this many months (0 = hide the bar). Default 3. */
   notificationMonths?: number
+  /** Lễ Tết shown in the notification bar (editable in admin settings). Missing = default list. */
+  lunarEvents?: LunarEvent[]
   showDateInfo?: boolean
 }

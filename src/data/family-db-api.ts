@@ -1,4 +1,5 @@
 import type { FamilyDatabase } from '../types/family'
+import { DEFAULT_LUNAR_EVENTS, cloneLunarEvents, isValidLunarEventList } from '../utils/lunar-events'
 
 const defaultSettings = {
   showBirthDate: true,
@@ -28,6 +29,9 @@ const normalizeSettings = (settings?: FamilyDatabase['settings']): NonNullable<F
     showSpouse: settings?.showSpouse ?? defaultSettings.showSpouse,
     showViewDetail: settings?.showViewDetail ?? defaultSettings.showViewDetail,
     notificationMonths: isValidNotificationMonths(settings?.notificationMonths) ? settings?.notificationMonths : 3,
+    lunarEvents: cloneLunarEvents(
+      isValidLunarEventList(settings?.lunarEvents) ? settings.lunarEvents : DEFAULT_LUNAR_EVENTS,
+    ),
   }
 }
 
@@ -45,7 +49,8 @@ const hasValidBooleanFields = (settings?: FamilyDatabase['settings']): boolean =
     (settings.showSpouse === undefined || typeof settings.showSpouse === 'boolean') &&
     (settings.showViewDetail === undefined || typeof settings.showViewDetail === 'boolean') &&
     (settings.showDateInfo === undefined || typeof settings.showDateInfo === 'boolean') &&
-    (settings.notificationMonths === undefined || isValidNotificationMonths(settings.notificationMonths))
+    (settings.notificationMonths === undefined || isValidNotificationMonths(settings.notificationMonths)) &&
+    (settings.lunarEvents === undefined || isValidLunarEventList(settings.lunarEvents))
   )
 }
 

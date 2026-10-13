@@ -3,6 +3,7 @@
 // to the bundled src/data/family-db.json so the site still loads.
 import seedDatabase from '../src/data/family-db.json'
 import { APPROVE_KEY, DOWNLOAD_KEY } from '../src/admin-paths'
+import { DEFAULT_LUNAR_EVENTS, isValidLunarEventList } from '../src/utils/lunar-events'
 
 interface KVNamespaceLike {
   get(key: string): Promise<string | null>
@@ -57,7 +58,8 @@ const isValidSettings = (value: unknown): boolean => {
   const months = s.notificationMonths
   return (
     ['showBirthDate', 'showDeathDate', 'showSpouse', 'showViewDetail', 'showDateInfo'].every((k) => isOptionalBool(s[k])) &&
-    (months === undefined || (typeof months === 'number' && Number.isInteger(months) && months >= 0 && months <= 12))
+    (months === undefined || (typeof months === 'number' && Number.isInteger(months) && months >= 0 && months <= 12)) &&
+    (s.lunarEvents === undefined || isValidLunarEventList(s.lunarEvents))
   )
 }
 
@@ -166,6 +168,7 @@ const withDefaultSettings = (value: unknown): Record<string, unknown> => {
     showSpouse: s.showSpouse ?? true,
     showViewDetail: s.showViewDetail ?? true,
     notificationMonths: s.notificationMonths ?? 3,
+    lunarEvents: s.lunarEvents ?? DEFAULT_LUNAR_EVENTS,
   }
 }
 

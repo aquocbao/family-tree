@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AnniversaryBar from './AnniversaryBar.vue'
 import FamilyTreeNode from './FamilyTreeNode.vue'
 import type { FamilyMember, FamilyUnit } from '../types/family'
+import type { LunarEvent } from '../utils/lunar-events'
 
 const props = withDefaults(
   defineProps<{
@@ -14,6 +15,7 @@ const props = withDefaults(
     showViewDetail?: boolean
     /** Notification bar window in months (0 = hidden). */
     notificationMonths?: number
+    lunarEvents?: LunarEvent[]
   }>(),
   {
     notificationMonths: 3,
@@ -606,6 +608,7 @@ onBeforeUnmount(() => {
       :members="members"
       :include-hidden="canManage"
       :months="notificationMonths"
+      :lunar-events="lunarEvents"
       @select="goToMember"
     />
 
