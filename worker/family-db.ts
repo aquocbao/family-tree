@@ -54,8 +54,10 @@ const isValidSettings = (value: unknown): boolean => {
   if (value === undefined) return true
   if (!value || typeof value !== 'object') return false
   const s = value as Record<string, unknown>
-  return ['showBirthDate', 'showDeathDate', 'showSpouse', 'showViewDetail', 'showDateInfo'].every((k) =>
-    isOptionalBool(s[k]),
+  const months = s.notificationMonths
+  return (
+    ['showBirthDate', 'showDeathDate', 'showSpouse', 'showViewDetail', 'showDateInfo'].every((k) => isOptionalBool(s[k])) &&
+    (months === undefined || (typeof months === 'number' && Number.isInteger(months) && months >= 0 && months <= 12))
   )
 }
 
@@ -154,8 +156,22 @@ const canonical = (value: unknown): string => {
   return JSON.stringify(normalize(value) ?? null)
 }
 
+// Settings with defaults filled in, so "missing" and "default value" compare as equal.
+const withDefaultSettings = (value: unknown): Record<string, unknown> => {
+  const s = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+  const legacy = s.showDateInfo
+  return {
+    showBirthDate: s.showBirthDate ?? legacy ?? true,
+    showDeathDate: s.showDeathDate ?? legacy ?? true,
+    showSpouse: s.showSpouse ?? true,
+    showViewDetail: s.showViewDetail ?? true,
+    notificationMonths: s.notificationMonths ?? 3,
+  }
+}
+
 const changesApprovedData = (current: Record<string, unknown>, next: Record<string, unknown>): boolean =>
-  canonical(current.members) !== canonical(next.members) || canonical(current.settings) !== canonical(next.settings)
+  canonical(current.members) !== canonical(next.members) ||
+  canonical(withDefaultSettings(current.settings)) !== canonical(withDefaultSettings(next.settings))
 
 // ---- Authenticated download of the whole database ----
 const sha256 = async (text: string): Promise<Uint8Array> =>

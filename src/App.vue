@@ -33,6 +33,7 @@ const defaultTreeSettings = (): FamilyTreeSettings => ({
   showDeathDate: true,
   showSpouse: true,
   showViewDetail: true,
+  notificationMonths: 3,
 })
 
 const approvedSettings = ref<FamilyTreeSettings>(defaultTreeSettings())
@@ -145,6 +146,7 @@ const showBirthDate = ref(true)
 const showDeathDate = ref(true)
 const showSpouseInfo = ref(true)
 const showViewDetailAction = ref(true)
+const notificationMonths = ref(3)
 const hasLoadedDatabase = ref(false)
 const suppressSettingsSync = ref(false)
 const route = useRoute()
@@ -358,6 +360,7 @@ const applyTreeSettings = (settings: FamilyTreeSettings): void => {
   showDeathDate.value = settings.showDeathDate
   showSpouseInfo.value = settings.showSpouse
   showViewDetailAction.value = settings.showViewDetail
+  notificationMonths.value = settings.notificationMonths ?? 3
 }
 
 const getTreeSettings = (): FamilyTreeSettings => ({
@@ -365,6 +368,7 @@ const getTreeSettings = (): FamilyTreeSettings => ({
   showDeathDate: showDeathDate.value,
   showSpouse: showSpouseInfo.value,
   showViewDetail: showViewDetailAction.value,
+  notificationMonths: notificationMonths.value,
 })
 
 const applyLoadedState = (database: FamilyDatabase): void => {
@@ -783,9 +787,9 @@ watch(isEditableMode, (currentMode) => {
   }
 })
 
-watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction], async (
-  [nextBirthDate, nextDeathDate, nextSpouse, nextDetail],
-  [previousBirthDate, previousDeathDate, previousSpouse, previousDetail],
+watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notificationMonths], async (
+  [nextBirthDate, nextDeathDate, nextSpouse, nextDetail, nextMonths],
+  [previousBirthDate, previousDeathDate, previousSpouse, previousDetail, previousMonths],
 ) => {
   if (
     suppressSettingsSync.value ||
@@ -795,7 +799,8 @@ watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction], asyn
       nextBirthDate === previousBirthDate &&
       nextDeathDate === previousDeathDate &&
       nextSpouse === previousSpouse &&
-      nextDetail === previousDetail
+      nextDetail === previousDetail &&
+      nextMonths === previousMonths
     )
   ) {
     return
@@ -808,6 +813,7 @@ watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction], asyn
       showDeathDate: nextDeathDate,
       showSpouse: nextSpouse,
       showViewDetail: nextDetail,
+      notificationMonths: nextMonths,
     },
   )
   if (!saved) {
@@ -816,6 +822,7 @@ watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction], asyn
     showDeathDate.value = previousDeathDate
     showSpouseInfo.value = previousSpouse
     showViewDetailAction.value = previousDetail
+    notificationMonths.value = previousMonths
     suppressSettingsSync.value = false
   }
 })
@@ -1075,6 +1082,18 @@ onMounted(async () => {
           <input v-model="showViewDetailAction" type="checkbox" />
           Hiển thị nút xem chi tiết
         </label>
+        <label class="setting-select">
+          Thanh thông báo (ngày giỗ, Lễ Tết) hiển thị trong
+          <select v-model.number="notificationMonths">
+            <option :value="0">Tắt thanh thông báo</option>
+            <option :value="1">1 tháng tới</option>
+            <option :value="2">2 tháng tới</option>
+            <option :value="3">3 tháng tới</option>
+            <option :value="4">4 tháng tới</option>
+            <option :value="6">6 tháng tới</option>
+
+          </select>
+        </label>
       </section>
     </div>
 
@@ -1088,6 +1107,7 @@ onMounted(async () => {
       :show-death-date="showDeathDate"
       :show-spouse="showSpouseInfo"
       :show-view-detail="showViewDetailAction"
+      :notification-months="notificationMonths"
       @edit-member="startEditMember"
       @delete-member="deleteMember"
       @toggle-member-hidden="toggleMemberHidden"
@@ -1482,6 +1502,24 @@ onMounted(async () => {
   font-weight: 600;
 }
 
+.setting-select {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  font-weight: 600;
+}
+
+.setting-select select {
+  max-width: 260px;
+  border: 1px solid #becce8;
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+  font: inherit;
+  font-weight: 400;
+  background: #fff;
+}
+
 /* ---------- Mobile ---------- */
 @media (max-width: 640px) {
   .app {
@@ -1533,7 +1571,8 @@ onMounted(async () => {
 
   /* 16px inputs stop iOS Safari from zooming in on focus */
   .member-form input,
-  .member-form select {
+  .member-form select,
+  .setting-select select {
     font-size: 16px;
   }
 

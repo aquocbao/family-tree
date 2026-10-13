@@ -12,8 +12,11 @@ const props = withDefaults(
     showDeathDate?: boolean
     showSpouse?: boolean
     showViewDetail?: boolean
+    /** Notification bar window in months (0 = hidden). */
+    notificationMonths?: number
   }>(),
   {
+    notificationMonths: 3,
     canManage: false,
     showBirthDate: true,
     showDeathDate: true,
@@ -583,7 +586,14 @@ onBeforeUnmount(() => {
     class="tree-wrapper"
     :class="{ 'full-view-active': isFullView, 'pseudo-full-view': isPseudoFullView }"
   >
-    <AnniversaryBar class="tree-anniversary" :members="members" :include-hidden="canManage" @select="goToMember" />
+    <AnniversaryBar
+      v-if="notificationMonths > 0"
+      class="tree-anniversary"
+      :members="members"
+      :include-hidden="canManage"
+      :months="notificationMonths"
+      @select="goToMember"
+    />
 
     <div class="view-controls">
       <div v-if="isSearchOpen" class="search-box">

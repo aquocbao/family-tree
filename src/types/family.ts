@@ -34,5 +34,7 @@ export interface FamilyTreeSettings {
   showDeathDate: boolean
   showSpouse: boolean
   showViewDetail: boolean
+  /** Notification bar: show ngày giỗ / Lễ Tết within this many months (0 = hide the bar). Default 3. */
+  notificationMonths?: number
   showDateInfo?: boolean
 }

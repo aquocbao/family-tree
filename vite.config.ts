@@ -28,6 +28,7 @@ type RawSettings = {
   showSpouse?: unknown
   showViewDetail?: unknown
   showDateInfo?: unknown
+  notificationMonths?: unknown
 }
 
 const createDefaultDatabase = (): {
@@ -116,7 +117,12 @@ const isValidSettings = (value: unknown): value is RawSettings => {
     (settings.showDeathDate === undefined || typeof settings.showDeathDate === 'boolean') &&
     (settings.showSpouse === undefined || typeof settings.showSpouse === 'boolean') &&
     (settings.showViewDetail === undefined || typeof settings.showViewDetail === 'boolean') &&
-    (settings.showDateInfo === undefined || typeof settings.showDateInfo === 'boolean')
+    (settings.showDateInfo === undefined || typeof settings.showDateInfo === 'boolean') &&
+    (settings.notificationMonths === undefined ||
+      (typeof settings.notificationMonths === 'number' &&
+        Number.isInteger(settings.notificationMonths) &&
+        settings.notificationMonths >= 0 &&
+        settings.notificationMonths <= 12))
   )
 }
 
@@ -135,6 +141,19 @@ const canonical = (value: unknown): string => {
     return v
   }
   return JSON.stringify(normalize(value) ?? null)
+}
+
+// Settings with defaults filled in, so "missing" and "default value" compare as equal.
+const withDefaultSettings = (value: unknown): Record<string, unknown> => {
+  const s = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+  const legacy = s.showDateInfo
+  return {
+    showBirthDate: s.showBirthDate ?? legacy ?? true,
+    showDeathDate: s.showDeathDate ?? legacy ?? true,
+    showSpouse: s.showSpouse ?? true,
+    showViewDetail: s.showViewDetail ?? true,
+    notificationMonths: s.notificationMonths ?? 3,
+  }
 }
 
 const familyDbPlugin = (downloadPassword?: string, approvePassword: string = APPROVE_KEY) => {
@@ -373,7 +392,7 @@ const familyDbPlugin = (downloadPassword?: string, approvePassword: string = APP
             }
             const changesApproved =
               canonical(current.members) !== canonical(payload.members) ||
-              canonical(current.settings) !== canonical(payload.settings)
+              canonical(withDefaultSettings(current.settings)) !== canonical(withDefaultSettings(payload.settings))
             if (changesApproved && req.headers['x-approve-password'] !== approvePassword) {
               setTimeout(() => sendJson(401, { error: 'Sai mật khẩu phê duyệt.' }), 800)
               return

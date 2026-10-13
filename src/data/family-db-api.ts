@@ -27,8 +27,12 @@ const normalizeSettings = (settings?: FamilyDatabase['settings']): NonNullable<F
     showDeathDate: settings?.showDeathDate ?? legacyDateVisibility ?? defaultSettings.showDeathDate,
     showSpouse: settings?.showSpouse ?? defaultSettings.showSpouse,
     showViewDetail: settings?.showViewDetail ?? defaultSettings.showViewDetail,
+    notificationMonths: isValidNotificationMonths(settings?.notificationMonths) ? settings?.notificationMonths : 3,
   }
 }
+
+const isValidNotificationMonths = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 12
 
 const hasValidBooleanFields = (settings?: FamilyDatabase['settings']): boolean => {
   if (!settings) {
@@ -40,7 +44,8 @@ const hasValidBooleanFields = (settings?: FamilyDatabase['settings']): boolean =
     (settings.showDeathDate === undefined || typeof settings.showDeathDate === 'boolean') &&
     (settings.showSpouse === undefined || typeof settings.showSpouse === 'boolean') &&
     (settings.showViewDetail === undefined || typeof settings.showViewDetail === 'boolean') &&
-    (settings.showDateInfo === undefined || typeof settings.showDateInfo === 'boolean')
+    (settings.showDateInfo === undefined || typeof settings.showDateInfo === 'boolean') &&
+    (settings.notificationMonths === undefined || isValidNotificationMonths(settings.notificationMonths))
   )
 }
 
