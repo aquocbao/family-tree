@@ -125,7 +125,7 @@ const whenLabel = (daysLeft: number): string => {
       {{ hasSoon ? 'Sắp đến ngày giỗ' : 'Lịch âm sắp tới' }}
     </span>
 
-    <!-- Ticker: when the entries don't fit, they scroll left → right (hover pauses); the list is then rendered twice for a seamless loop. -->
+    <!-- Ticker: when the entries don't fit, they scroll right → left (hover pauses); the list is then rendered twice for a seamless loop. -->
     <div
       ref="tickerRef"
       class="ticker"
@@ -232,7 +232,7 @@ const whenLabel = (daysLeft: number): string => {
 }
 
 .ticker.is-scrolling .ticker-track {
-  animation: ticker-left-to-right var(--ticker-duration, 30s) linear infinite;
+  animation: ticker-right-to-left var(--ticker-duration, 30s) linear infinite;
 }
 
 .ticker:hover .ticker-track,
@@ -240,13 +240,13 @@ const whenLabel = (daysLeft: number): string => {
   animation-play-state: paused;
 }
 
-/* Track holds two identical copies: sliding from -50% to 0 moves everything left → right and loops seamlessly */
-@keyframes ticker-left-to-right {
+/* Track holds two identical copies: sliding from 0 to -50% moves everything right → left and loops seamlessly */
+@keyframes ticker-right-to-left {
   from {
-    transform: translateX(-50%);
+    transform: translateX(0);
   }
   to {
-    transform: translateX(0);
+    transform: translateX(-50%);
   }
 }
 
