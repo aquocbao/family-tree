@@ -16,7 +16,7 @@ const props = withDefaults(
     /** Only show ngày giỗ / festivals within this many months from today. */
     months?: number
   }>(),
-  { includeHidden: false, soonDays: 14, limit: 5, eventLimit: 5, months: 3 },
+  { includeHidden: false, soonDays: 14, limit: 5, eventLimit: 5, months: 4 },
 )
 
 const emit = defineEmits<{
