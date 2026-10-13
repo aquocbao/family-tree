@@ -302,7 +302,8 @@ const resolveChildUnits = (unitKey: string): FamilyUnit[] => {
   return getChildUnits(unitKey)
 }
 
-const initialExpandDepth = computed(() => (selectedParentUnit.value ? 1 : 0))
+// Every branch starts expanded (whole tree and focused branch); "Thu gọn" still collapses a node.
+const initialExpandDepth = computed(() => Number.POSITIVE_INFINITY)
 
 const selectedRootLabel = computed(() => {
   if (!selectedUnitKey.value) {
