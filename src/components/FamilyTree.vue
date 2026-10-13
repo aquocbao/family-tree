@@ -302,8 +302,7 @@ const resolveChildUnits = (unitKey: string): FamilyUnit[] => {
   return getChildUnits(unitKey)
 }
 
-// Every branch starts expanded (whole tree and focused branch); "Thu gọn" still collapses a node.
-const initialExpandDepth = computed(() => Number.POSITIVE_INFINITY)
+const initialExpandDepth = computed(() => (selectedParentUnit.value ? 1 : 0))
 
 const selectedRootLabel = computed(() => {
   if (!selectedUnitKey.value) {
@@ -342,7 +341,8 @@ const toggleSearch = async (): Promise<void> => {
   }
 }
 const highlightedMemberId = ref<string | null>(null)
-const expandRequest = ref<{ keys: Set<string>; nonce: number } | undefined>(undefined)
+const expandRequest = ref<{ keys: Set<string>; nonce: number; collapse?: boolean } | undefined>(undefined)
+const isAllExpanded = ref(false)
 let highlightTimer: ReturnType<typeof setTimeout> | undefined
 
 const normalizeName = (value: string): string =>
@@ -434,6 +434,19 @@ const goToMember = async (memberId: string): Promise<void> => {
   highlightTimer = setTimeout(() => {
     highlightedMemberId.value = null
   }, 5000)
+}
+
+// "Mở rộng tất cả" / "Thu gọn tất cả"
+const toggleExpandAll = (): void => {
+  if (isAllExpanded.value) {
+    expandRequest.value = { keys: new Set(), nonce: Date.now(), collapse: true }
+    isAllExpanded.value = false
+    void centerOnRoot()
+    return
+  }
+
+  expandRequest.value = { keys: new Set(units.value.unitMap.keys()), nonce: Date.now() }
+  isAllExpanded.value = true
 }
 
 const clearFocusedTree = (): void => {
@@ -626,6 +639,9 @@ onBeforeUnmount(() => {
           <button type="button" class="zoom-value" title="Về 100%" @click="resetZoom">{{ Math.round(zoom * 100) }}%</button>
           <button type="button" aria-label="Phóng to" :disabled="zoom >= ZOOM_MAX" @click="changeZoom(ZOOM_STEP)">+</button>
         </div>
+        <button type="button" class="expand-all-btn" :aria-pressed="isAllExpanded" @click="toggleExpandAll">
+          {{ isAllExpanded ? 'Thu gọn tất cả' : 'Mở rộng tất cả' }}
+        </button>
         <button
           type="button"
           class="search-toggle-btn"
@@ -872,6 +888,20 @@ onBeforeUnmount(() => {
   margin-left: auto;
 }
 
+.expand-all-btn {
+  border: 1px solid #a77f48;
+  border-radius: 8px;
+  background: #fff4df;
+  color: #5c3818;
+  font-weight: 700;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+
+.expand-all-btn:hover {
+  background: #ffe9c3;
+}
+
 .search-toggle-btn {
   border: 1px solid #a77f48;
   border-radius: 8px;
@@ -984,6 +1014,7 @@ onBeforeUnmount(() => {
     font-size: 16px; /* prevents iOS zoom on focus */
   }
 
+  .expand-all-btn,
   .search-toggle-btn,
   .full-view-btn {
     padding: 0.35rem 0.6rem;

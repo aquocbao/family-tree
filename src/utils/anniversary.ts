@@ -128,8 +128,6 @@ export interface LunarEvent {
 
 export const LUNAR_EVENTS: LunarEvent[] = [
   { name: 'Mồng 1 Tết Nguyên Đán', day: 1, month: 1 },
-  { name: 'Mồng 2 Tết Nguyên Đán', day: 2, month: 1 },
-  { name: 'Mồng 3 Tết Nguyên Đán', day: 3, month: 1 },
   { name: 'Rằm tháng Giêng (Tết Nguyên Tiêu)', day: 15, month: 1 },
   { name: 'Giỗ Tổ Hùng Vương', day: 10, month: 3 },
   { name: 'Tết Đoan Ngọ', day: 5, month: 5 },

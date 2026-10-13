@@ -17,7 +17,7 @@ const props = withDefaults(
     showViewDetail?: boolean
     depth?: number
     expandDepth?: number
-    expandRequest?: { keys: Set<string>; nonce: number }
+    expandRequest?: { keys: Set<string>; nonce: number; collapse?: boolean }
     highlightedMemberId?: string | null
   }>(),
   {
@@ -51,6 +51,11 @@ const isExpanded = ref(props.depth <= props.expandDepth)
 watch(
   () => props.expandRequest,
   (request) => {
+    if (request?.collapse) {
+      // "Thu gọn tất cả": back to the initial state
+      isExpanded.value = props.depth <= props.expandDepth
+      return
+    }
     if (request?.keys.has(props.unit.key)) {
       isExpanded.value = true
     }
