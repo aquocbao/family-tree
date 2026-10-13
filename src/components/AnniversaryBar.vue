@@ -13,23 +13,33 @@ const props = withDefaults(
     limit?: number
     /** How many of the nearest lunar festivals (Tết, Trung Thu...) to show. */
     eventLimit?: number
+    /** Only show ngày giỗ / festivals within this many months from today. */
+    months?: number
   }>(),
-  { includeHidden: false, soonDays: 14, limit: 5, eventLimit: 5 },
+  { includeHidden: false, soonDays: 14, limit: 5, eventLimit: 5, months: 3 },
 )
 
 const emit = defineEmits<{
   select: [id: string]
 }>()
 
+// Number of days from today until the same date `months` months later (e.g. 13/10 → 13/01).
+const windowDays = computed(() => {
+  const today = new Date()
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const end = new Date(start.getFullYear(), start.getMonth() + props.months, start.getDate())
+  return Math.round((end.getTime() - start.getTime()) / 86400000)
+})
+
 const upcoming = computed(() =>
   getUpcomingAnniversaries(
     props.members.filter((member) => props.includeHidden || !member.isHidden),
     new Date(),
-    400, // look ahead a full lunar year (up to 13 months)
+    windowDays.value,
   ).slice(0, props.limit),
 )
 
-const upcomingEvents = computed(() => getUpcomingLunarEvents(new Date(), 400).slice(0, props.eventLimit))
+const upcomingEvents = computed(() => getUpcomingLunarEvents(new Date(), windowDays.value).slice(0, props.eventLimit))
 
 // One list for the ticker: ngày giỗ and festivals, nearest first.
 type TickerItem =
