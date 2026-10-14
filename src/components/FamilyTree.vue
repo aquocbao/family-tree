@@ -325,7 +325,15 @@ const focusFromMember = (memberId: string): void => {
     return
   }
 
+  resetExpandState()
   selectedUnitKey.value = unitKey
+}
+
+// Switching between the whole tree and a branch starts from the default open/closed state.
+// (Declared as a function so it can be used above.)
+function resetExpandState(): void {
+  expandRequest.value = undefined
+  isAllExpanded.value = false
 }
 
 // ---- Search by full name ----
@@ -452,6 +460,7 @@ const toggleExpandAll = (): void => {
 }
 
 const clearFocusedTree = (): void => {
+  resetExpandState()
   selectedUnitKey.value = null
 }
 
@@ -673,7 +682,7 @@ onBeforeUnmount(() => {
       <ul class="tree-root">
         <FamilyTreeNode
           v-for="unit in selectedRootUnits"
-          :key="unit.key"
+          :key="`${selectedUnitKey ?? 'all'}:${unit.key}`"
           :unit="unit"
           :child-units-by-unit-key="childUnitsByUnitKey"
           :child-units-resolver="resolveChildUnits"
