@@ -62,3 +62,36 @@ html.tree-pseudo-full-view,
 html.tree-pseudo-full-view body {
   overflow: hidden;
 }
+
+/* Tree diagram print: added to the tree canvas while the print copy is made — plain text cards */
+.tree-print-mode .avatar,
+.tree-print-mode .actions,
+.tree-print-mode .toggle {
+  display: none !important;
+}
+
+.tree-print-mode .person-card {
+  background: #fff !important;
+  border: 1px solid #555 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  animation: none !important;
+  min-width: 0 !important;
+  padding: 0.35rem 0.6rem !important;
+}
+
+.tree-print-mode .person-card,
+.tree-print-mode .person-card h3,
+.tree-print-mode .person-card p,
+.tree-print-mode .person-card strong {
+  color: #000 !important;
+}
+
+.tree-print-mode .person-card h3 {
+  margin: 0 0 0.15rem !important;
+}
+
+.tree-print-mode .person-card p {
+  margin: 0.05rem 0 !important;
+}

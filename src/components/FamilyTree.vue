@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import AnniversaryBar from './AnniversaryBar.vue'
 import FamilyTreeNode from './FamilyTreeNode.vue'
+import SearchableMemberSelect from './SearchableMemberSelect.vue'
 import type { FamilyMember, FamilyUnit } from '../types/family'
 import type { LunarEvent } from '../utils/lunar-events'
 import { honorific, isDeceased, memorialPlaceLabel } from '../utils/memorial'
@@ -994,7 +995,25 @@ const describeForPrint = (member: FamilyMember): string => {
   return details.length ? `${name} <span class="details">— ${escapeHtml(details.join(' · '))}</span>` : name
 }
 
-const buildPrintHtml = (): string => {
+/** Generation number of a unit in the whole tree (1 = top). */
+const generationOfUnit = (unitKey: string): number => {
+  let generation = 1
+  let key: string | undefined = unitKey
+  const seen = new Set<string>()
+  while (key && !seen.has(key)) {
+    seen.add(key)
+    const parentKey: string | undefined = unitParentLinks.value.primary.get(key)?.parentKey
+    if (!parentKey) break
+    generation += 1
+    key = parentKey
+  }
+  return generation
+}
+
+/** What to print: the whole family, or one chosen person with all their descendants. */
+type PrintScope = { roots: FamilyUnit[]; label: string; startGeneration: (unit: FamilyUnit) => number }
+
+const buildPrintHtml = (scope: PrintScope): string => {
   const lines: string[] = []
   const seen = new Set<string>()
 
@@ -1024,40 +1043,105 @@ const buildPrintHtml = (): string => {
       }
     }
 
-    lines.push(`<section class="unit" style="margin-left:${(generation - 1) * 2.2}em">${rows.join('')}</section>`)
+    const indent = generation - scope.startGeneration(scope.roots[0] ?? unit)
+    lines.push(`<section class="unit" style="margin-left:${Math.max(0, indent) * 2.2}em">${rows.join('')}</section>`)
 
-    for (const child of resolveChildUnits(unit.key)) {
+    for (const child of getChildUnits(unit.key)) {
       walk(child, generation + 1)
     }
   }
 
-  for (const unit of selectedRootUnits.value) {
-    walk(unit, 1)
+  for (const unit of scope.roots) {
+    walk(unit, scope.startGeneration(unit))
   }
 
-  const branch = selectedRootLabel.value ? `<p class="branch">Nhánh: ${escapeHtml(selectedRootLabel.value)}</p>` : ''
+  const branch = scope.label ? `<p class="branch">Nhánh: ${escapeHtml(scope.label)}</p>` : ''
   return `<h1>${escapeHtml(document.title)}</h1>${branch}${lines.join('\n')}`
 }
 
-const printTree = (): void => {
-  if (isPrinting.value) return
-  isPrinting.value = true
+type PrintLayout = 'list' | 'tree'
+const isPrintMenuOpen = ref(false)
+const printMenuRef = ref<HTMLElement | null>(null)
 
+const printScopeMode = ref<'all' | 'person'>('all')
+const printPersonId = ref('')
+
+const printableMembers = computed(() =>
+  props.members
+    .filter((member) => props.canManage || !member.isHidden)
+    .sort((left, right) => left.name.localeCompare(right.name, 'vi')),
+)
+
+const togglePrintMenu = (): void => {
+  isPrintMenuOpen.value = !isPrintMenuOpen.value
+  if (isPrintMenuOpen.value && selectedUnit.value && !printPersonId.value) {
+    // In "Xem chi tiết": suggest the person being viewed
+    const owner = unitParentLinks.value.primary.get(selectedUnit.value.key)?.owner ?? selectedUnit.value.members[0]
+    printPersonId.value = owner?.id ?? ''
+    printScopeMode.value = 'person'
+  }
+}
+
+const printPersonUnitKey = computed(() =>
+  printScopeMode.value === 'person' && printPersonId.value
+    ? units.value.memberToUnitKey.get(printPersonId.value)
+    : undefined,
+)
+
+const canPrint = computed(() => printScopeMode.value === 'all' || Boolean(printPersonUnitKey.value))
+
+const currentPrintScope = (): PrintScope => {
+  const unitKey = printPersonUnitKey.value
+  const unit = unitKey ? units.value.unitMap.get(unitKey) : undefined
+  if (unit) {
+    const generation = generationOfUnit(unit.key)
+    return { roots: [unit], label: unit.members.map((m) => m.name).join(' & '), startGeneration: () => generation }
+  }
+  return { roots: rootUnits.value, label: '', startGeneration: () => 1 }
+}
+
+const onDocumentPointerDown = (event: PointerEvent): void => {
+  if (isPrintMenuOpen.value && printMenuRef.value && !printMenuRef.value.contains(event.target as Node)) {
+    isPrintMenuOpen.value = false
+  }
+}
+
+/** Prints a full HTML document from a hidden iframe (the app page itself is left alone). */
+const printDocument = async (html: string, prepare?: (doc: Document) => void | Promise<void>): Promise<void> => {
   const frame = document.createElement('iframe')
   frame.setAttribute('aria-hidden', 'true')
-  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'
+  frame.style.cssText = 'position:fixed;left:-20000px;top:0;width:8000px;height:600px;border:0;visibility:hidden'
   document.body.appendChild(frame)
 
   const doc = frame.contentDocument
   const win = frame.contentWindow
   if (!doc || !win) {
     frame.remove()
-    isPrinting.value = false
     return
   }
 
   doc.open()
-  doc.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${escapeHtml(document.title)}</title>
+  doc.write(html)
+  doc.close()
+  await prepare?.(doc)
+
+  let finished = false
+  const done = () => {
+    if (finished) return
+    finished = true
+    setTimeout(() => frame.remove(), 500)
+  }
+  win.addEventListener('afterprint', done, { once: true })
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  win.focus()
+  win.print()
+  // Some browsers never fire afterprint
+  setTimeout(done, 60000)
+}
+
+/** Text list: top down, each generation indented. */
+const printList = (scope: PrintScope): Promise<void> =>
+  printDocument(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${escapeHtml(document.title)}</title>
 <style>
   @page { size: A4 portrait; margin: 15mm 14mm; }
   body { margin: 0; color: #000; background: #fff; font: 11pt/1.45 'Noto Serif', 'Times New Roman', serif; }
@@ -1068,20 +1152,102 @@ const printTree = (): void => {
   .row.sub { padding-left: 4.2em; }
   .gen { display: inline-block; width: 4.2em; font-weight: 600; }
   .details { font-weight: normal; }
-</style></head><body>${buildPrintHtml()}</body></html>`)
-  doc.close()
+</style></head><body>${buildPrintHtml(scope)}</body></html>`)
 
-  const done = () => {
-    setTimeout(() => frame.remove(), 500)
+const PRINT_TREE_WIDTH_PX = 1040 // A4 landscape minus 10mm margins
+
+const waitFrames = (count = 2): Promise<void> =>
+  new Promise((resolve) => {
+    const step = (left: number) => (left <= 0 ? resolve() : requestAnimationFrame(() => step(left - 1)))
+    step(count)
+  })
+
+/** Tree diagram: the tree as shown on screen (expanded branches), cards as plain text, fitted to the page width. */
+const printDiagram = async (): Promise<void> => {
+  const canvas = canvasRef.value
+  if (!canvas) return
+
+  // Lay the tree out in print form (no avatars/buttons) so lines and row heights match the smaller cards
+  canvas.classList.add('tree-print-mode')
+  let clone: HTMLElement
+  try {
+    await nextTick()
+    await waitFrames()
+    equalizeCardHeights()
+    balanceTreeRoot()
+    updateInLawLinks()
+    await waitFrames(1)
+    clone = canvas.cloneNode(true) as HTMLElement
+  } finally {
+    canvas.classList.remove('tree-print-mode')
+    scheduleInLawLinks()
+  }
+  clone.style.zoom = '1'
+
+  const styles = [...document.querySelectorAll('style, link[rel="stylesheet"]')].map((node) => node.outerHTML).join('\n')
+  const branch = selectedRootLabel.value ? `<p class="print-branch">Nhánh: ${escapeHtml(selectedRootLabel.value)}</p>` : ''
+
+  await printDocument(
+    `<!doctype html><html lang="vi"><head><meta charset="utf-8"><base href="${location.origin}/">
+<title>${escapeHtml(document.title)}</title>${styles}
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  html, body { margin: 0 !important; padding: 0 !important; min-height: 0 !important; background: #fff !important; }
+  body { color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .print-title { margin: 0 0 2pt; text-align: center; font: 600 15pt 'Noto Serif', serif; }
+  .print-branch { margin: 0 0 6pt; text-align: center; font: 11pt 'Noto Serif', serif; }
+  .tree-canvas { min-width: 0 !important; margin: 0 auto !important; }
+</style></head><body><h1 class="print-title">${escapeHtml(document.title)}</h1>${branch}</body></html>`,
+    async (doc) => {
+      doc.body.appendChild(doc.importNode(clone, true))
+      await (doc.fonts?.ready ?? Promise.resolve())
+      const printed = doc.body.querySelector<HTMLElement>('.tree-canvas')
+      if (printed) {
+        printed.style.zoom = String(Math.min(1, PRINT_TREE_WIDTH_PX / Math.max(1, printed.scrollWidth)))
+      }
+    },
+  )
+}
+
+const printAs = async (layout: PrintLayout): Promise<void> => {
+  if (!canPrint.value || isPrinting.value) return
+  isPrintMenuOpen.value = false
+  isPrinting.value = true
+  try {
+    if (layout === 'list') {
+      await printList(currentPrintScope())
+      return
+    }
+
+    // Diagram: show the chosen branch (or the whole tree) fully expanded, print it, then put the view back.
+    const previousKey = selectedUnitKey.value
+    const previousAllExpanded = isAllExpanded.value
+    const targetKey = printPersonUnitKey.value ?? null
+    if (targetKey !== previousKey) {
+      resetExpandState()
+      selectedUnitKey.value = targetKey
+      await nextTick()
+    }
+    expandRequest.value = { keys: new Set(units.value.unitMap.keys()), nonce: Date.now() }
+    isAllExpanded.value = true
+    await nextTick()
+    await waitFrames(3)
+
+    try {
+      await printDiagram()
+    } finally {
+      if (targetKey !== previousKey) {
+        resetExpandState()
+        selectedUnitKey.value = previousKey
+      } else if (!previousAllExpanded) {
+        expandRequest.value = { keys: new Set(), nonce: Date.now(), collapse: true }
+        isAllExpanded.value = false
+      }
+      void centerOnRoot()
+    }
+  } finally {
     isPrinting.value = false
   }
-  win.addEventListener('afterprint', done, { once: true })
-  setTimeout(() => {
-    win.focus()
-    win.print()
-    // Some browsers never fire afterprint
-    setTimeout(() => isPrinting.value && done(), 2000)
-  }, 100)
 }
 
 const toggleFullView = async (): Promise<void> => {
@@ -1158,6 +1324,7 @@ onMounted(() => {
     void document.fonts?.ready.then(scheduleInLawLinks)
     window.addEventListener('resize', scheduleInLawLinks)
     window.addEventListener('load', scheduleInLawLinks)
+    document.addEventListener('pointerdown', onDocumentPointerDown)
   }
   document.addEventListener('fullscreenchange', syncFullViewState)
   syncFullViewState()
@@ -1174,6 +1341,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', scheduleInLawLinks)
   window.removeEventListener('load', scheduleInLawLinks)
   canvasMutationObserver?.disconnect()
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
   cancelAnimationFrame(linkFrame)
   document.documentElement.classList.remove('tree-pseudo-full-view')
   if (highlightTimer) {
@@ -1266,16 +1434,48 @@ onBeforeUnmount(() => {
           <span class="btn-icon" aria-hidden="true">{{ isSearchOpen ? '✕' : '🔍' }}</span>
           <span class="btn-label">{{ isSearchOpen ? 'Đóng tìm kiếm' : 'Tìm kiếm' }}</span>
         </button>
-        <button
-          type="button"
-          class="full-view-btn print-btn"
-          title="In danh sách gia phả (chỉ chữ)"
-          :disabled="isPrinting"
-          @click="printTree"
-        >
-          <span class="btn-icon" aria-hidden="true">🖨</span>
-          <span class="btn-label">In</span>
-        </button>
+        <div ref="printMenuRef" class="print-menu-wrap">
+          <button
+            type="button"
+            class="full-view-btn print-btn"
+            title="In gia phả"
+            aria-haspopup="menu"
+            :aria-expanded="isPrintMenuOpen"
+            :disabled="isPrinting"
+            @click="togglePrintMenu"
+          >
+            <span class="btn-icon" aria-hidden="true">🖨</span>
+            <span class="btn-label">In</span>
+          </button>
+          <div v-if="isPrintMenuOpen" class="print-menu" role="dialog" aria-label="In gia phả" @keydown.esc="isPrintMenuOpen = false">
+            <p class="print-menu-title">1. Chọn người cần in</p>
+            <label class="print-scope">
+              <input v-model="printScopeMode" type="radio" value="all" />
+              <span>Toàn bộ gia phả</span>
+            </label>
+            <label class="print-scope">
+              <input v-model="printScopeMode" type="radio" value="person" />
+              <span>Một người và con cháu</span>
+            </label>
+            <div v-if="printScopeMode === 'person'" class="print-person">
+              <SearchableMemberSelect
+                v-model="printPersonId"
+                list-id="print-person-members"
+                :members="printableMembers"
+                placeholder="Tìm tên người cần in"
+              />
+            </div>
+            <p class="print-menu-title">2. Chọn kiểu in</p>
+            <button type="button" class="print-option" :disabled="!canPrint" @click="printAs('list')">
+              <strong>📄 Danh sách chữ</strong>
+              <span>Từ trên xuống, mỗi đời thụt vào một bậc · A4 dọc</span>
+            </button>
+            <button type="button" class="print-option" :disabled="!canPrint" @click="printAs('tree')">
+              <strong>🌳 Sơ đồ cây</strong>
+              <span>Mở rộng toàn bộ nhánh đã chọn · A4 ngang</span>
+            </button>
+          </div>
+        </div>
         <button
           type="button"
           class="full-view-btn"
@@ -1605,6 +1805,87 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 0.5rem;
   margin-left: auto;
+}
+
+.print-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.print-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: min(320px, calc(100vw - 32px));
+  padding: 0.6rem;
+  border: 1px solid #c9a24a;
+  border-radius: 10px;
+  background: #fffaf0;
+  box-shadow: 0 10px 24px rgba(60, 25, 8, 0.25);
+}
+
+.print-menu-title {
+  margin: 0 0 0.35rem;
+  padding: 0 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #8b1d12;
+}
+
+.print-scope {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.2rem 0.3rem;
+  color: #4a2e14;
+  cursor: pointer;
+}
+
+.print-person {
+  margin: 0.2rem 0 0.3rem 1.6rem;
+}
+
+.print-menu .print-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.print-menu .print-menu-title + .print-option,
+.print-person + .print-menu-title,
+.print-scope + .print-menu-title {
+  margin-top: 0.5rem;
+}
+
+.print-menu .print-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: #4a2e14;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.print-menu .print-option + .print-option {
+  margin-top: 0.2rem;
+}
+
+.print-menu .print-option:not(:disabled):hover,
+.print-menu .print-option:focus-visible {
+  border-color: #e0c690;
+  background: #fff1d6;
+}
+
+.print-menu .print-option span {
+  font-size: 0.78rem;
+  color: #7a5a36;
 }
 
 .btn-icon {
