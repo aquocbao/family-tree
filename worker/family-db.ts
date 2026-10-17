@@ -123,7 +123,8 @@ export const onRequestPut = async ({ request, env }: Context): Promise<Response>
   try {
     const stored = await env.FAMILY_DB_KV.get(KV_KEY)
     const current = (stored ? JSON.parse(stored) : seedDatabase) as Record<string, unknown>
-    if (changesApprovedData(current, payload)) {
+    // Discarding the pending copy (Từ chối) is a super admin action too.
+    if (changesApprovedData(current, payload) || discardsPending(current, payload)) {
       const given = request.headers.get('X-Approve-Password') ?? ''
       if (!given || !(await passwordMatches(given, env.APPROVE_PASSWORD || APPROVE_KEY))) {
         await new Promise((resolve) => setTimeout(resolve, 800))
@@ -179,6 +180,12 @@ const withDefaultSettings = (value: unknown): Record<string, unknown> => {
 const changesApprovedData = (current: Record<string, unknown>, next: Record<string, unknown>): boolean =>
   canonical(current.members) !== canonical(next.members) ||
   canonical(withDefaultSettings(current.settings)) !== canonical(withDefaultSettings(next.settings))
+
+const hasPending = (db: Record<string, unknown>): boolean =>
+  Array.isArray(db.pendingMembers) && db.pendingMembers.length > 0
+
+const discardsPending = (current: Record<string, unknown>, next: Record<string, unknown>): boolean =>
+  hasPending(current) && !hasPending(next) && !changesApprovedData(current, next)
 
 // ---- Authenticated download of the whole database ----
 const sha256 = async (text: string): Promise<Uint8Array> =>

@@ -814,11 +814,14 @@ const deleteMember = async (id: string): Promise<void> => {
 }
 
 const isApprovePromptOpen = ref(false)
+/** What the password prompt confirms: approve (publish) or reject (discard) the admin's changes. */
+const reviewAction = ref<'approve' | 'reject'>('approve')
 const approvePassword = ref('')
 const approveError = ref('')
 const approvePasswordRef = ref<HTMLInputElement | null>(null)
 
-const openApprovePrompt = async (): Promise<void> => {
+const openApprovePrompt = async (action: 'approve' | 'reject' = 'approve'): Promise<void> => {
+  reviewAction.value = action
   isApprovePromptOpen.value = true
   approveError.value = ''
   await nextTick()
@@ -869,6 +872,44 @@ const approvePendingChanges = async (): Promise<void> => {
     isSaving.value = false
   }
 }
+
+// Từ chối: drop the pending copy; the approved data stays as it was.
+const rejectPendingChanges = async (): Promise<void> => {
+  if (!isSuperAdminMode.value || !pendingMembers.value || !approvePassword.value) {
+    return
+  }
+
+  isSaving.value = true
+  try {
+    const nextDatabase = buildDatabasePayload({
+      nextApprovedMembers: cloneMembers(approvedMembers.value),
+      nextApprovedSettings: cloneSettings(approvedSettings.value),
+      nextPendingMembers: null,
+      nextPendingSettings: null,
+      nextPendingUpdatedAt: undefined,
+    })
+
+    await saveFamilyDatabase(nextDatabase, { approvePassword: approvePassword.value })
+    closeApprovePrompt()
+    pendingMembers.value = null
+    pendingSettings.value = null
+    pendingUpdatedAt.value = undefined
+    loadingError.value = ''
+    formError.value = ''
+    resetForm()
+    syncTreeSettingsForCurrentMode()
+  } catch (error) {
+    approveError.value = error instanceof Error ? error.message : 'Không thể từ chối thay đổi.'
+    approvePassword.value = ''
+    await nextTick()
+    approvePasswordRef.value?.focus()
+  } finally {
+    isSaving.value = false
+  }
+}
+
+const submitReview = (): Promise<void> =>
+  reviewAction.value === 'reject' ? rejectPendingChanges() : approvePendingChanges()
 
 const pendingUpdatedLabel = computed(() => {
   if (!pendingUpdatedAt.value) {
@@ -1133,16 +1174,29 @@ onMounted(async () => {
       </p>
       <p v-else>Chưa có thay đổi chờ duyệt.</p>
       <template v-if="isSuperAdminMode">
-        <button
-          v-if="!isApprovePromptOpen"
-          type="button"
-          class="approve-btn"
-          :disabled="isSaving || !hasPendingChanges"
-          @click="openApprovePrompt"
-        >
-          Phê duyệt thay đổi
-        </button>
-        <form v-else class="approve-form" @submit.prevent="approvePendingChanges">
+        <div v-if="!isApprovePromptOpen" class="review-actions">
+          <button
+            type="button"
+            class="approve-btn"
+            :disabled="isSaving || !hasPendingChanges"
+            @click="openApprovePrompt('approve')"
+          >
+            Phê duyệt thay đổi
+          </button>
+          <button
+            type="button"
+            class="reject-btn"
+            :disabled="isSaving || !hasPendingChanges"
+            title="Bỏ toàn bộ thay đổi của admin, giữ dữ liệu đã duyệt"
+            @click="openApprovePrompt('reject')"
+          >
+            Từ chối thay đổi
+          </button>
+        </div>
+        <form v-else class="approve-form" @submit.prevent="submitReview">
+          <span v-if="reviewAction === 'reject'" class="reject-note">
+            Từ chối sẽ xóa toàn bộ thay đổi đang chờ duyệt và quay về dữ liệu đã duyệt.
+          </span>
           <input
             ref="approvePasswordRef"
             v-model="approvePassword"
@@ -1152,8 +1206,12 @@ onMounted(async () => {
             aria-label="Mật khẩu phê duyệt"
             :disabled="isSaving"
           />
-          <button type="submit" class="approve-btn" :disabled="isSaving || !approvePassword">
-            {{ isSaving ? 'Đang xử lý...' : 'Xác nhận phê duyệt' }}
+          <button
+            type="submit"
+            :class="reviewAction === 'reject' ? 'reject-btn' : 'approve-btn'"
+            :disabled="isSaving || !approvePassword"
+          >
+            {{ isSaving ? 'Đang xử lý...' : reviewAction === 'reject' ? 'Xác nhận từ chối' : 'Xác nhận phê duyệt' }}
           </button>
           <button type="button" class="download-cancel" :disabled="isSaving" @click="closeApprovePrompt">Hủy</button>
           <span v-if="approveError" class="download-error">{{ approveError }}</span>
@@ -1652,6 +1710,33 @@ onMounted(async () => {
 .approve-btn:disabled {
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.reject-btn {
+  border: 1px solid #d99a8f;
+  border-radius: 8px;
+  background: #9b2a1c;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0.45rem 0.9rem;
+}
+
+.reject-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.reject-note {
+  flex-basis: 100%;
+  color: #8f1d1d;
+  font-weight: 600;
 }
 
 .editor-panel {

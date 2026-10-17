@@ -26,6 +26,8 @@ body {
     url('/gia-pha-hoi-van.svg') repeat-x left 0 bottom 10px / 32px 20px,
     linear-gradient(#6e1a14, #6e1a14) no-repeat left bottom / 100% 40px,
     radial-gradient(ellipse at 50% 40%, transparent 55%, rgba(92, 44, 14, 0.22) 100%),
+    /* faint hoa văn: Thọ medallions, tường vân clouds, lozenges */
+    url('/gia-pha-hoa-van.svg') repeat center 40px / 240px 240px,
     url('/gia-pha-bg.svg') repeat 0 0 / 480px 480px,
     #efe1c2;
 }
@@ -38,6 +40,7 @@ body {
       url('/gia-pha-hoi-van.svg') repeat-x left 0 bottom 6px / 24px 15px,
       linear-gradient(#6e1a14, #6e1a14) no-repeat left bottom / 100% 27px,
       radial-gradient(ellipse at 50% 40%, transparent 55%, rgba(92, 44, 14, 0.22) 100%),
+      url('/gia-pha-hoa-van.svg') repeat center 27px / 170px 170px,
       url('/gia-pha-bg.svg') repeat 0 0 / 480px 480px,
       #efe1c2;
   }

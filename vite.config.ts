@@ -397,7 +397,7 @@ const familyDbPlugin = (downloadPassword?: string, approvePassword: string = APP
             }
 
             // Approving (changing members/settings) requires the approval password.
-            let current: { members?: unknown; settings?: unknown } = {}
+            let current: { members?: unknown; settings?: unknown; pendingMembers?: unknown } = {}
             try {
               current = JSON.parse(normalizeJsonText(await fs.readFile(dbFilePath, 'utf8'))) as typeof current
             } catch {
@@ -406,7 +406,11 @@ const familyDbPlugin = (downloadPassword?: string, approvePassword: string = APP
             const changesApproved =
               canonical(current.members) !== canonical(payload.members) ||
               canonical(withDefaultSettings(current.settings)) !== canonical(withDefaultSettings(payload.settings))
-            if (changesApproved && req.headers['x-approve-password'] !== approvePassword) {
+            // Discarding the pending copy (Từ chối) also needs the approval password
+            const hadPending = Array.isArray(current.pendingMembers) && current.pendingMembers.length > 0
+            const keepsPending = Array.isArray(payload.pendingMembers) && payload.pendingMembers.length > 0
+            const discardsPending = hadPending && !keepsPending
+            if ((changesApproved || discardsPending) && req.headers['x-approve-password'] !== approvePassword) {
               setTimeout(() => sendJson(401, { error: 'Sai mật khẩu phê duyệt.' }), 800)
               return
             }
