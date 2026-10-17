@@ -525,7 +525,7 @@ const updateInLawLinks = (): void => {
   // spouse), one level lower per step outwards. Remember each marriage line's middle for its children.
   const cardOf = (id?: string) =>
     id ? canvas.querySelector<HTMLElement>(`.person-card[data-member-id="${CSS.escape(id)}"]`) : null
-  const marriageMiddle = new Map<string, { x: number; y: number }>()
+  const marriageMiddle = new Map<string, { x: number; y: number; dx: number }>()
   const labels: { key: string; x: number; y: number; text: string }[] = []
   for (const row of canvas.querySelectorAll<HTMLElement>('.multi-row[data-host]')) {
     const hostId = row.dataset.host ?? ''
@@ -556,7 +556,7 @@ const updateInLawLinks = (): void => {
         const x1 = onRight ? hostBox.right : hostBox.left
         const x2 = onRight ? box.left : box.right
         links.push({ key: `marry-${hostId}-${spouseId}`, d: `M ${x1} ${y} L ${x2} ${y}` })
-        marriageMiddle.set(`${hostId}|${spouseId}`, { x: (x1 + x2) / 2, y })
+        marriageMiddle.set(`${hostId}|${spouseId}`, { x: (x1 + x2) / 2, y, dx: (x1 + x2) / 2 - (hostBox.left + hostBox.width / 2) })
         if (text) labels.push({ key: `label-${hostId}-${spouseId}`, x: (x1 + x2) / 2, y: y - 6, text })
       } else {
         const bottom = Math.max(hostBox.bottom, box.bottom)
@@ -567,7 +567,7 @@ const updateInLawLinks = (): void => {
           key: `marry-${hostId}-${spouseId}`,
           d: `M ${xs} ${hostBox.bottom} L ${xs} ${y} L ${xe} ${y} L ${xe} ${box.bottom}`,
         })
-        marriageMiddle.set(`${hostId}|${spouseId}`, { x: (xs + xe) / 2, y })
+        marriageMiddle.set(`${hostId}|${spouseId}`, { x: (xs + xe) / 2, y, dx: (xs + xe) / 2 - (hostBox.left + hostBox.width / 2) })
         // on the line, just past the inner spouse's card
         if (text) labels.push({ key: `label-${hostId}-${spouseId}`, x: xe + (onRight ? -1 : 1) * (box.width / 2 + 20), y: y - 3, text })
       }
@@ -577,40 +577,47 @@ const updateInLawLinks = (): void => {
   // Several spouses: place each marriage's children group under that marriage (as close as the groups'
   // widths allow), instead of all groups bunched in the middle. Offsets are relative to the node's centre,
   // so the result doesn't depend on where the node itself sits (no feedback loop).
-  for (const container of canvas.querySelectorAll<HTMLElement>('.children-groups')) {
+  // Deepest first: placing an inner family widens its node, which moves the outer ones.
+  for (const container of [...canvas.querySelectorAll<HTMLElement>('.children-groups')].reverse()) {
     const node = container.parentElement
     const nodeBox = node ? boxInCanvas(node, canvas) : null
     const groups = [...container.querySelectorAll<HTMLElement>(':scope > .children[data-link-a]')]
     if (!nodeBox || groups.length === 0) continue
     const nodeCenter = nodeBox.left + nodeBox.width / 2
     const GAP = 28
-    let previousEnd = -Infinity
-    const placed = groups.map((group) => {
+    // The groups stay side by side as one block (left → right in marriage order). The block is slid
+    // sideways so the groups sit as close as possible under their marriages — but never further than half
+    // the parents' row, so one big branch can't push the others far away.
+    let offset = 0
+    const items = groups.map((group) => {
       const a = group.dataset.linkA ?? ''
       const b = group.dataset.linkB ?? ''
       const middle = marriageMiddle.get(`${a}|${b}`)
       const hostCard = cardOf(a)
       const hostBox = hostCard ? boxInCanvas(hostCard, canvas) : null
-      const wanted = (middle ? middle.x : hostBox ? hostBox.left + hostBox.width / 2 : nodeCenter) - nodeCenter
+      // measured now, in the same layout (positions from earlier in this pass may be out of date)
+      const hostCenter = hostBox ? hostBox.left + hostBox.width / 2 : nodeCenter
+      const wanted = hostCenter + (middle ? middle.dx : 0) - nodeCenter
       const width = group.offsetWidth
-      const center = Math.max(wanted, previousEnd + GAP + width / 2)
-      previousEnd = center + width / 2
-      return { group, width, start: center - width / 2 }
+      const item = { group, width, offset, wanted }
+      offset += width + GAP
+      return item
     })
-    const left = -placed[0].start
-    const right = previousEnd
-    const half = Math.max(left, right)
+    const blockWidth = offset - GAP
+    const idealStart =
+      items.reduce((sum, item) => sum + (item.wanted - (item.offset + item.width / 2)), 0) / items.length
+    const rowBox = boxInCanvas(container.previousElementSibling as HTMLElement, canvas)
+    const limit = Math.max(0, (rowBox?.width ?? 0) / 2)
+    const blockCenter = Math.max(-limit, Math.min(limit, idealStart + blockWidth / 2))
+    if (!Number.isFinite(blockCenter)) continue
+    // shifting a centred block by d = padding 2d on the other side
     const styles: [HTMLElement, string, string][] = [
       [container, 'gap', '0px'],
-      [container, 'justifyContent', 'flex-start'],
-      [container, 'paddingLeft', `${Math.round(half - left)}px`],
-      [container, 'paddingRight', `${Math.round(half - right)}px`],
+      [container, 'justifyContent', 'center'],
+      [container, 'paddingLeft', `${Math.round(Math.max(0, 2 * blockCenter))}px`],
+      [container, 'paddingRight', `${Math.round(Math.max(0, -2 * blockCenter))}px`],
     ]
-    let end = placed[0].start
-    for (const item of placed) {
-      styles.push([item.group, 'marginLeft', `${Math.round(item.start - end)}px`])
-      end = item.start + item.width
-    }
+    items.forEach((item, index) => styles.push([item.group, 'marginLeft', index === 0 ? '0px' : `${GAP}px`]))
     for (const [element, prop, value] of styles) {
       const style = element.style as unknown as Record<string, string>
       const current = style[prop]
