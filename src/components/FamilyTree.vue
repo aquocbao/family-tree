@@ -613,7 +613,11 @@ const updateInLawLinks = (): void => {
     }
     for (const [element, prop, value] of styles) {
       const style = element.style as unknown as Record<string, string>
-      if (style[prop] !== value) style[prop] = value
+      const current = style[prop]
+      // ignore ±1px rounding changes: centring an odd width flips between two values and would loop forever
+      const close =
+        value.endsWith('px') && current?.endsWith('px') && Math.abs(parseFloat(value) - parseFloat(current)) <= 1
+      if (current !== value && !close) style[prop] = value
     }
   }
 
