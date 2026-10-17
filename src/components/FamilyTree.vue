@@ -278,9 +278,6 @@ const unitParentLinks = computed(() => {
       candidates.find((candidate) => candidate.owner.gender === 'male') ??
       candidates[0]
     primary.set(unit.key, chosen)
-    if (unit.host) {
-      continue // several spouses: each stays in the row; their own parents are not pulled in as "bên ngoại"
-    }
 
     for (const candidate of candidates) {
       if (candidate.owner.id === chosen.owner.id || inLawByMemberId.has(candidate.owner.id)) {
@@ -380,7 +377,7 @@ const getInLawParents = (memberId: string): FamilyUnit | undefined => unitParent
 
 // ---- Connector lines for in-law parents (computed from the rendered layout) ----
 const canvasRef = ref<HTMLElement | null>(null)
-const inLawLinks = ref<{ key: string; d: string }[]>([])
+const inLawLinks = ref<{ key: string; d: string; dashed?: boolean }[]>([])
 /** "Vợ 1", "Vợ 2"… written on each marriage line of a person with several spouses */
 const marriageLabels = ref<{ key: string; x: number; y: number; text: string }[]>([])
 let linkFrame = 0
@@ -418,7 +415,7 @@ const updateInLawLinks = (): void => {
     return
   }
 
-  const links: { key: string; d: string }[] = []
+  const links: { key: string; d: string; dashed?: boolean }[] = []
 
   for (const guest of canvas.querySelectorAll<HTMLElement>('[data-inlaw-for]')) {
     const childId = guest.dataset.inlawFor ?? ''
@@ -426,6 +423,25 @@ const updateInLawLinks = (): void => {
     const parents = guest.querySelector<HTMLElement>('.inlaw-cards')
     const childWrap = guest.querySelector<HTMLElement>('.inlaw-child')
     const guestBox = boxInCanvas(guest, canvas)
+
+    // One of several spouses: stays in their row; a dashed line runs from their own parents down to them.
+    if (parents && guest.hasAttribute('data-inlaw-inplace')) {
+      const childCard = canvas.querySelector<HTMLElement>(`.multi-row .person-card[data-member-id="${CSS.escape(childId)}"]`)
+      const parentsBox = boxInCanvas(parents, canvas)
+      const childBox = childCard ? boxInCanvas(childCard, canvas) : null
+      if (parentsBox && childBox) {
+        const px = parentsBox.left + parentsBox.width / 2
+        const cx = childBox.left + childBox.width / 2
+        const turnY = childBox.top - 8
+        links.push({
+          key: `${childId}-down`,
+          d: `M ${px} ${parentsBox.bottom} L ${px} ${turnY} L ${cx} ${turnY} L ${cx} ${childBox.top}`,
+          dashed: true,
+        })
+      }
+      continue
+    }
+
     if (!parents || !childWrap || !guestBox) {
       continue
     }
@@ -491,7 +507,8 @@ const updateInLawLinks = (): void => {
 
     // parents → child (vertical)
     const px = parentsBox.left + parentsBox.width / 2
-    links.push({ key: `${childId}-down`, d: `M ${px} ${parentsBox.bottom} L ${px} ${childBox.top}` })
+    // bên ngoại/bên nội: dashed, so it reads as a side family and not part of the main line
+    links.push({ key: `${childId}-down`, d: `M ${px} ${parentsBox.bottom} L ${px} ${childBox.top}`, dashed: true })
 
     // partner ↔ child (horizontal marriage line)
     if (partnerBox) {
@@ -1782,7 +1799,7 @@ onBeforeUnmount(() => {
     <div ref="canvasRef" class="tree-canvas" :style="{ zoom }">
       <!-- Lines for a married-in child: down from their parents, and across to the partner they married -->
       <svg class="inlaw-links" aria-hidden="true">
-        <path v-for="link in inLawLinks" :key="link.key" :d="link.d" />
+        <path v-for="link in inLawLinks" :key="link.key" :d="link.d" :class="{ 'is-dashed': link.dashed }" />
         <text v-for="label in marriageLabels" :key="label.key" :x="label.x" :y="label.y" class="marriage-label">
           {{ label.text }}
         </text>
@@ -2023,6 +2040,11 @@ onBeforeUnmount(() => {
   fill: none;
   stroke: #9b3a24;
   stroke-width: 2;
+}
+
+.inlaw-links path.is-dashed {
+  stroke: #b0794e;
+  stroke-dasharray: 6 5;
 }
 
 .inlaw-links .marriage-label {

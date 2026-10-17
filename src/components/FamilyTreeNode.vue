@@ -57,12 +57,14 @@ const inLawGuests = computed(() => {
   if (!resolver) {
     return []
   }
-  const list: { unit: FamilyUnit; child: FamilyMember }[] = []
+  // inPlace: the child is one of several spouses and stays in that row (no copy under the parents);
+  // FamilyTree draws a dashed line from these parents down to them instead.
+  const list: { unit: FamilyUnit; child: FamilyMember; inPlace: boolean }[] = []
   for (const childUnit of childUnits.value) {
     for (const member of childUnit.members) {
       const parents = resolver(member.id)
       if (parents) {
-        list.push({ unit: parents, child: member })
+        list.push({ unit: parents, child: member, inPlace: Boolean(childUnit.host) })
       }
     }
   }
@@ -259,6 +261,7 @@ const toggleExpanded = async (): Promise<void> => {
           class="inlaw-guest"
           :data-inlaw-for="guest.child.id"
           :data-inlaw-spouse="guest.child.spouseId"
+          :data-inlaw-inplace="guest.inPlace ? '' : undefined"
         >
           <span class="inlaw-tag">{{ inLawSide(guest.child) }} · Cha mẹ của {{ guest.child.name }}</span>
           <div class="inlaw-cards">
@@ -281,7 +284,7 @@ const toggleExpanded = async (): Promise<void> => {
             </template>
           </div>
           <!-- The married-in child, placed under their own parents and level with their partner (FamilyTree positions it) -->
-          <div class="inlaw-child">
+          <div v-if="!guest.inPlace" class="inlaw-child">
             <PersonCard
               :member="guest.child"
               :spouse-name="memberNameById(guest.child.spouseId)"
@@ -568,6 +571,17 @@ const toggleExpanded = async (): Promise<void> => {
   display: flex;
   align-items: center;
   gap: 0.55rem;
+}
+
+/* Bên ngoại / bên nội: a side family, drawn dashed and lighter so it isn't read as the main line */
+.inlaw-cards .spouse-line {
+  border-top: 2px dashed #b0794e;
+}
+
+.inlaw-cards :deep(.person-card) {
+  border-style: dashed;
+  border-color: #b0794e;
+  opacity: 0.85;
 }
 
 /* Out of the normal flow: FamilyTree sets "top" so this card sits level with the partner it married */
