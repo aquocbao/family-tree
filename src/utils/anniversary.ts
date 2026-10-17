@@ -129,7 +129,7 @@ export interface UpcomingLunarEvent {
   lunarMonth: number
 }
 
-/** Lunar festivals within the next `days` days (today included), nearest first. */
+/** Festivals (âm lịch and dương lịch) within the next `days` days (today included), nearest first. */
 export const getUpcomingLunarEvents = (
   today: Date = new Date(),
   days = 30,
@@ -142,12 +142,20 @@ export const getUpcomingLunarEvents = (
     const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset)
     const lunar = next
     next = lunarOf(new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset + 1))
+
+    // Dương lịch events: plain day/month match
+    for (const event of events) {
+      if (event.calendar === 'solar' && event.day === date.getDate() && event.month === date.getMonth() + 1) {
+        results.push({ event, date, daysLeft: offset, lunarDay: lunar.day, lunarMonth: lunar.month })
+      }
+    }
+
     if (lunar.leap) {
       continue
     }
 
     for (const event of events) {
-      if (event.month !== lunar.month) {
+      if (event.calendar === 'solar' || event.month !== lunar.month) {
         continue
       }
 

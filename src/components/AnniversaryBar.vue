@@ -137,7 +137,7 @@ const whenLabel = (daysLeft: number): string => {
         <path d="M12 8.5v8M8.5 10v6.5M15.5 10v6.5" />
         <path d="M5 16.5h14l-1.5 4.5h-11z" />
       </svg>
-      {{ hasSoon ? 'Sắp đến ngày giỗ' : 'Lịch âm sắp tới' }}
+      {{ hasSoon ? 'Sắp đến ngày giỗ' : 'Lịch sắp tới' }}
     </span>
 
     <!-- Ticker: when the entries don't fit, they scroll right → left (hover pauses); the list is then rendered twice for a seamless loop. -->
@@ -176,7 +176,11 @@ const whenLabel = (daysLeft: number): string => {
               <span class="item-tag item-tag--event">Lễ Tết</span>
               <strong>{{ item.data.event.name }}</strong>
               <span class="anniversary-when" :class="{ 'is-today': item.daysLeft === 0 }">{{ whenLabel(item.daysLeft) }}</span>
-              <span class="anniversary-date">
+              <span v-if="item.data.event.calendar === 'solar'" class="anniversary-date">
+                dương lịch · {{ weekdayName(item.data.date) }}, {{ formatSolarDate(item.data.date) }} ·
+                {{ item.data.lunarDay }}/{{ item.data.lunarMonth }} âm lịch
+              </span>
+              <span v-else class="anniversary-date">
                 {{ item.data.lunarDay }}/{{ item.data.lunarMonth }} âm lịch · {{ weekdayName(item.data.date) }},
                 {{ formatSolarDate(item.data.date) }}
               </span>

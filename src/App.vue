@@ -13,6 +13,7 @@ import {
   MAX_LUNAR_EVENT_NAME,
   cloneLunarEvents,
   isValidLunarEvent,
+  type EventCalendar,
   type LunarEvent,
 } from './utils/lunar-events'
 import type { FamilyDatabase, FamilyGender, FamilyMember, FamilyTreeSettings } from './types/family'
@@ -1012,32 +1013,47 @@ watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notif
 })
 
 // ---- Lễ Tết editor (draft; saved with the "Lưu danh sách" button) ----
-type LunarEventDraft = { name: string; day: number | string; month: number | string; lastDayOfMonth: boolean }
+type LunarEventDraft = {
+  name: string
+  day: number | string
+  month: number | string
+  calendar: EventCalendar
+  lastDayOfMonth: boolean
+}
+
+const toLunarEventDraft = (e: LunarEvent): LunarEventDraft => ({
+  name: e.name,
+  day: e.day,
+  month: e.month,
+  calendar: e.calendar === 'solar' ? 'solar' : 'lunar',
+  lastDayOfMonth: e.calendar !== 'solar' && Boolean(e.lastDayOfMonth),
+})
 const lunarEventsDraft = ref<LunarEventDraft[]>([])
 const lunarEventsError = ref('')
 const lunarEventsMessage = ref('')
 
 function resetLunarEventsDraft(): void {
-  lunarEventsDraft.value = lunarEvents.value.map((e) => ({
-    name: e.name,
-    day: e.day,
-    month: e.month,
-    lastDayOfMonth: Boolean(e.lastDayOfMonth),
-  }))
+  lunarEventsDraft.value = lunarEvents.value.map(toLunarEventDraft)
   lunarEventsError.value = ''
 }
 
 resetLunarEventsDraft()
 
 const lunarEventsDirty = computed(() => {
-  const draft = lunarEventsDraft.value.map((e) => [e.name.trim(), Number(e.day), Number(e.month), e.lastDayOfMonth])
-  const saved = lunarEvents.value.map((e) => [e.name, e.day, e.month, Boolean(e.lastDayOfMonth)])
+  const draft = lunarEventsDraft.value.map((e) => [
+    e.name.trim(),
+    Number(e.day),
+    Number(e.month),
+    e.calendar,
+    e.calendar === 'lunar' && e.lastDayOfMonth,
+  ])
+  const saved = lunarEvents.value.map(toLunarEventDraft).map((e) => [e.name, Number(e.day), Number(e.month), e.calendar, e.lastDayOfMonth])
   return JSON.stringify(draft) !== JSON.stringify(saved)
 })
 
 const addLunarEvent = (): void => {
   lunarEventsMessage.value = ''
-  lunarEventsDraft.value.push({ name: '', day: 1, month: 1, lastDayOfMonth: false })
+  lunarEventsDraft.value.push({ name: '', day: 1, month: 1, calendar: 'lunar', lastDayOfMonth: false })
 }
 
 const removeLunarEvent = (index: number): void => {
@@ -1047,25 +1063,24 @@ const removeLunarEvent = (index: number): void => {
 
 const restoreDefaultLunarEvents = (): void => {
   lunarEventsMessage.value = ''
-  lunarEventsDraft.value = DEFAULT_LUNAR_EVENTS.map((e) => ({
-    name: e.name,
-    day: e.day,
-    month: e.month,
-    lastDayOfMonth: Boolean(e.lastDayOfMonth),
-  }))
+  lunarEventsDraft.value = DEFAULT_LUNAR_EVENTS.map(toLunarEventDraft)
 }
 
 const saveLunarEvents = (): void => {
   lunarEventsMessage.value = ''
-  const next: LunarEvent[] = lunarEventsDraft.value.map((e) => ({
-    name: e.name.trim(),
-    day: e.lastDayOfMonth ? 30 : Number(e.day),
-    month: Number(e.month),
-    ...(e.lastDayOfMonth ? { lastDayOfMonth: true } : {}),
-  }))
+  const next: LunarEvent[] = lunarEventsDraft.value.map((e) => {
+    const lastDay = e.calendar === 'lunar' && e.lastDayOfMonth
+    return {
+      name: e.name.trim(),
+      day: lastDay ? 30 : Number(e.day),
+      month: Number(e.month),
+      ...(e.calendar === 'solar' ? { calendar: 'solar' as const } : {}),
+      ...(lastDay ? { lastDayOfMonth: true } : {}),
+    }
+  })
   const invalidIndex = next.findIndex((e) => !isValidLunarEvent(e))
   if (invalidIndex !== -1) {
-    lunarEventsError.value = `Dòng ${invalidIndex + 1}: cần tên (tối đa ${MAX_LUNAR_EVENT_NAME} ký tự), ngày 1–30 và tháng 1–12.`
+    lunarEventsError.value = `Dòng ${invalidIndex + 1}: cần tên (tối đa ${MAX_LUNAR_EVENT_NAME} ký tự), tháng 1–12 và ngày hợp lệ (âm lịch 1–30, dương lịch theo số ngày của tháng).`
     return
   }
   if (next.length > MAX_LUNAR_EVENTS) {
@@ -1416,9 +1431,12 @@ onMounted(async () => {
         </label>
 
         <div class="lunar-events-editor">
-          <h3>Lễ Tết trên thanh thông báo (âm lịch)</h3>
+          <h3>Lễ Tết trên thanh thông báo</h3>
+          <p class="settings-help">
+            Mỗi sự kiện chọn theo âm lịch hoặc dương lịch. Ô "Cuối" = ngày cuối tháng âm lịch (29 hoặc 30), ví dụ Giao thừa.
+          </p>
           <div class="lunar-events-head" aria-hidden="true">
-            <span>Tên</span><span>Ngày</span><span>Tháng</span><span>Cuối tháng</span><span></span>
+            <span>Lịch</span><span>Ngày</span><span>Tháng</span><span>Cuối</span><span></span>
           </div>
           <div v-for="(event, index) in lunarEventsDraft" :key="index" class="lunar-event-row">
             <input
@@ -1429,18 +1447,37 @@ onMounted(async () => {
               placeholder="Tên sự kiện"
               aria-label="Tên sự kiện"
             />
+            <select
+              v-model="event.calendar"
+              class="lunar-event-calendar"
+              :class="`is-${event.calendar}`"
+              aria-label="Loại lịch"
+            >
+              <option value="lunar">Âm lịch</option>
+              <option value="solar">Dương lịch</option>
+            </select>
             <input
               v-model.number="event.day"
               type="number"
               min="1"
-              max="30"
-              :disabled="event.lastDayOfMonth"
-              aria-label="Ngày âm lịch"
+              :max="event.calendar === 'solar' ? 31 : 30"
+              :disabled="event.calendar === 'lunar' && event.lastDayOfMonth"
+              :aria-label="event.calendar === 'solar' ? 'Ngày dương lịch' : 'Ngày âm lịch'"
             />
-            <input v-model.number="event.month" type="number" min="1" max="12" aria-label="Tháng âm lịch" />
-            <label class="lunar-event-last" title="Ngày cuối tháng (29 hoặc 30), ví dụ Giao thừa">
-              <input v-model="event.lastDayOfMonth" type="checkbox" />
-              <span class="lunar-event-last-text">Cuối tháng</span>
+            <input
+              v-model.number="event.month"
+              type="number"
+              min="1"
+              max="12"
+              :aria-label="event.calendar === 'solar' ? 'Tháng dương lịch' : 'Tháng âm lịch'"
+            />
+            <label
+              class="lunar-event-last"
+              :class="{ 'is-disabled': event.calendar === 'solar' }"
+              title="Ngày cuối tháng âm lịch (29 hoặc 30), ví dụ Giao thừa"
+            >
+              <input v-model="event.lastDayOfMonth" type="checkbox" :disabled="event.calendar === 'solar'" />
+              <span class="lunar-event-last-text">Cuối</span>
             </label>
             <button type="button" class="lunar-event-remove" aria-label="Xóa sự kiện" @click="removeLunarEvent(index)">✕</button>
           </div>
@@ -1997,9 +2034,19 @@ onMounted(async () => {
 .lunar-events-head,
 .lunar-event-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 4.2rem 4.2rem 6.2rem 2rem;
-  gap: 0.4rem;
+  /* name on its own line, then lịch · ngày · tháng · cuối · xóa */
+  grid-template-columns: minmax(7.4rem, 1fr) 3.1rem 3.1rem 3.4rem 2rem;
+  gap: 0.3rem 0.4rem;
   align-items: center;
+}
+
+.lunar-event-row .lunar-event-name {
+  grid-column: 1 / -1;
+}
+
+.lunar-event-row {
+  padding-bottom: 0.35rem;
+  border-bottom: 1px dotted #e3d6bd;
 }
 
 .lunar-events-head {
@@ -2021,6 +2068,31 @@ onMounted(async () => {
   border-radius: 6px;
   padding: 0.3rem 0.45rem;
   font: inherit;
+}
+
+.lunar-event-calendar {
+  min-width: 0;
+  border: 1px solid #becce8;
+  border-radius: 6px;
+  padding: 0.3rem 0.35rem;
+  font: inherit;
+  background: #fff;
+}
+
+.lunar-event-calendar.is-lunar {
+  border-color: #d7b777;
+  background: #fff8e8;
+  color: #6b3d0c;
+}
+
+.lunar-event-calendar.is-solar {
+  border-color: #9fb9e6;
+  background: #f1f6ff;
+  color: #23345d;
+}
+
+.lunar-event-last.is-disabled {
+  opacity: 0.45;
 }
 
 .lunar-event-row input:disabled {
@@ -2294,7 +2366,8 @@ onMounted(async () => {
   .member-form select,
   .setting-select select,
   .lunar-event-row input[type='text'],
-  .lunar-event-row input[type='number'] {
+  .lunar-event-row input[type='number'],
+  .lunar-event-calendar {
     font-size: 16px;
   }
 
@@ -2308,8 +2381,6 @@ onMounted(async () => {
 
   .lunar-event-row {
     grid-template-columns: minmax(0, 1fr) 3.4rem 3.4rem 2rem 2rem;
-    padding-bottom: 0.35rem;
-    border-bottom: 1px dotted #e3d6bd;
   }
 
   .lunar-event-last-text {
