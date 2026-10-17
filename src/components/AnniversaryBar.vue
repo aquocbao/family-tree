@@ -173,7 +173,7 @@ const whenLabel = (daysLeft: number): string => {
               </span>
             </button>
             <span v-else class="anniversary-item is-event">
-              <span class="item-tag item-tag--event">Lễ Tết</span>
+              <span class="item-tag item-tag--event">Sự kiện</span>
               <strong>{{ item.data.event.name }}</strong>
               <span class="anniversary-when" :class="{ 'is-today': item.daysLeft === 0 }">{{ whenLabel(item.daysLeft) }}</span>
               <span v-if="item.data.event.calendar === 'solar'" class="anniversary-date">
