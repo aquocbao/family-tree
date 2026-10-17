@@ -21,6 +21,7 @@ type RawMember = {
   fatherId?: unknown
   motherId?: unknown
   spouseId?: unknown
+  formerSpouseId?: unknown
   spouseOnRight?: unknown
   isHidden?: unknown
 }
@@ -104,6 +105,7 @@ const isValidMember = (value: unknown): value is RawMember => {
     isOptionalString(member.fatherId) &&
     isOptionalString(member.motherId) &&
     isOptionalString(member.spouseId) &&
+    isOptionalString(member.formerSpouseId) &&
     (member.spouseOnRight === undefined || typeof member.spouseOnRight === 'boolean') &&
     (member.isHidden === undefined || typeof member.isHidden === 'boolean')
   )

@@ -18,6 +18,8 @@ export interface FamilyMember {
   fatherId?: string
   motherId?: string
   spouseId?: string
+  /** Vợ/chồng trước (đã ly hôn). Set on either person of the former couple. */
+  formerSpouseId?: string
   spouseOnRight?: boolean
   isHidden?: boolean
 }

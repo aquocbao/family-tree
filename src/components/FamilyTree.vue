@@ -137,18 +137,72 @@ const compareUnitsLeftToRight = (left: FamilyUnit, right: FamilyUnit): number =>
   return left.key.localeCompare(right.key)
 }
 
+// ---- Divorce: former spouses ----
+// A former spouse (formerSpouseId, set on either person) is drawn in the row of the person they were married
+// to — the "host" — joined by a dashed "ly hôn" line, with their children hanging from that line.
+// Host = the one whose parents are in the tree (the blood member); if neither/both, the man.
+const formerSpouseLinks = computed(() => {
+  const hasParentsInTree = (member: FamilyMember): boolean =>
+    Boolean((member.fatherId && memberMap.value.has(member.fatherId)) || (member.motherId && memberMap.value.has(member.motherId)))
+  const isInMutualPair = (member: FamilyMember): boolean => {
+    const spouse = member.spouseId ? memberMap.value.get(member.spouseId) : undefined
+    return Boolean(spouse && isMutualSpouse(member, spouse))
+  }
+
+  const hostOf = new Map<string, string>() // former spouse id → host id
+  const exesOf = new Map<string, FamilyMember[]>() // host id → former spouses drawn in their row
+  const seenPairs = new Set<string>()
+
+  for (const member of props.members) {
+    const other = member.formerSpouseId ? memberMap.value.get(member.formerSpouseId) : undefined
+    if (!other || other.id === member.id) {
+      continue
+    }
+    const pairKey = [member.id, other.id].sort().join('|')
+    if (seenPairs.has(pairKey)) {
+      continue
+    }
+    seenPairs.add(pairKey)
+
+    const memberBlood = hasParentsInTree(member)
+    const otherBlood = hasParentsInTree(other)
+    let host = member
+    let ex = other
+    if (memberBlood !== otherBlood) {
+      host = memberBlood ? member : other
+      ex = memberBlood ? other : member
+    } else if (other.gender === 'male' && member.gender !== 'male') {
+      host = other
+      ex = member
+    }
+
+    // The former spouse can only be moved into the host's row when they don't belong elsewhere
+    // (no parents in the tree, not currently married to someone, not already placed with another host).
+    if (hasParentsInTree(ex) || isInMutualPair(ex) || hostOf.has(ex.id) || hostOf.has(host.id)) {
+      continue
+    }
+    hostOf.set(ex.id, host.id)
+    exesOf.set(host.id, [...(exesOf.get(host.id) ?? []), ex])
+  }
+
+  return { hostOf, exesOf }
+})
+
+const getFormerSpouses = (hostId: string): FamilyMember[] => formerSpouseLinks.value.exesOf.get(hostId) ?? []
+
 const units = computed(() => {
   const map = new Map<string, FamilyUnit>()
   const memberToUnitKey = new Map<string, string>()
   const orderedMembers = [...props.members].sort(compareMembersLeftToRight)
+  const { hostOf } = formerSpouseLinks.value
 
   for (const member of orderedMembers) {
-    if (memberToUnitKey.has(member.id)) {
-      continue
+    if (memberToUnitKey.has(member.id) || hostOf.has(member.id)) {
+      continue // former spouses are placed with their host below
     }
 
     const spouse = member.spouseId ? memberMap.value.get(member.spouseId) : undefined
-    if (spouse && !memberToUnitKey.has(spouse.id) && isMutualSpouse(member, spouse)) {
+    if (spouse && !memberToUnitKey.has(spouse.id) && !hostOf.has(spouse.id) && isMutualSpouse(member, spouse)) {
       const pair = orderSpousePairLeftToRight(member, spouse)
       const keyParts = [member.id, spouse.id].sort((left, right) => left.localeCompare(right))
       const key = `pair:${keyParts[0]}|${keyParts[1]}`
@@ -161,6 +215,14 @@ const units = computed(() => {
     const key = `single:${member.id}`
     map.set(key, { key, members: [member] })
     memberToUnitKey.set(member.id, key)
+  }
+
+  // A former spouse belongs to their host's unit (so their children hang from the host's family)
+  for (const [exId, hostId] of hostOf) {
+    const hostKey = memberToUnitKey.get(hostId)
+    if (hostKey) {
+      memberToUnitKey.set(exId, hostKey)
+    }
   }
 
   return {
@@ -398,6 +460,35 @@ const updateInLawLinks = (): void => {
         links.push({ key: `${childId}-stem`, d: `M ${middleX} ${midY} L ${middleX} ${stemEnd}` })
       }
     }
+  }
+
+  // Divorce: each marriage's children (current couple / each former spouse) hang from the middle of
+  // that marriage's line: down, across to the middle of the children group, down to the group.
+  const cardOf = (id?: string) =>
+    id ? canvas.querySelector<HTMLElement>(`.person-card[data-member-id="${CSS.escape(id)}"]`) : null
+  for (const group of canvas.querySelectorAll<HTMLElement>('.children[data-link-a]')) {
+    const cardA = cardOf(group.dataset.linkA)
+    const cardB = cardOf(group.dataset.linkB)
+    const boxA = cardA ? boxInCanvas(cardA, canvas) : null
+    const boxB = cardB ? boxInCanvas(cardB, canvas) : null
+    const groupBox = boxInCanvas(group, canvas)
+    if (!boxA || !boxB || !groupBox) {
+      continue
+    }
+    const same = group.dataset.linkA === group.dataset.linkB
+    const [left, right] = boxA.left <= boxB.left ? [boxA, boxB] : [boxB, boxA]
+    const x0 = same ? boxA.left + boxA.width / 2 : (left.right + right.left) / 2
+    const y0 = same ? boxA.bottom : left.top + Math.min(left.height, right.height) / 2
+    const items = group.querySelectorAll<HTMLElement>(':scope > .node')
+    // one child: straight down to that child's card; several: down to the bar over them
+    const firstItemBox = items.length === 1 ? boxInCanvas(items[0], canvas) : null
+    const endY = firstItemBox ? firstItemBox.top + 2 : groupBox.top + 1
+    const x1 = groupBox.left + groupBox.width / 2
+    const turnY = Math.max(y0 + 12, groupBox.top - 16)
+    links.push({
+      key: `marriage-${group.dataset.linkA}-${group.dataset.linkB}`,
+      d: `M ${x0} ${y0} L ${x0} ${turnY} L ${x1} ${turnY} L ${x1} ${endY}`,
+    })
   }
 
   // Only update when something moved, so redrawing the SVG doesn't re-trigger the observer forever.
@@ -938,6 +1029,7 @@ onBeforeUnmount(() => {
           :member-name-by-id="getMemberName"
           :member-by-id="getMemberById"
           :in-law-parents-resolver="getInLawParents"
+          :former-spouses-resolver="getFormerSpouses"
           :can-manage="canManage"
           :show-birth-date="showBirthDate"
           :show-death-date="showDeathDate"

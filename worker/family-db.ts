@@ -48,6 +48,7 @@ const isValidMember = (value: unknown): boolean => {
     isOptionalString(m.fatherId) &&
     isOptionalString(m.motherId) &&
     isOptionalString(m.spouseId) &&
+    isOptionalString(m.formerSpouseId) &&
     isOptionalBool(m.spouseOnRight) &&
     isOptionalBool(m.isHidden)
   )

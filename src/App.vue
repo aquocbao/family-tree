@@ -29,6 +29,7 @@ type MemberForm = {
   fatherId: string
   motherId: string
   spouseId: string
+  formerSpouseId: string
   spouseOnRight: boolean
 }
 
@@ -63,6 +64,7 @@ const emptyForm = (): MemberForm => ({
   fatherId: '',
   motherId: '',
   spouseId: '',
+  formerSpouseId: '',
   spouseOnRight: false,
 })
 
@@ -409,6 +411,7 @@ const startEditMember = (id: string): void => {
     fatherId: member.fatherId ?? '',
     motherId: member.motherId ?? '',
     spouseId: member.spouseId ?? '',
+    formerSpouseId: member.formerSpouseId ?? '',
     spouseOnRight: member.spouseOnRight ?? false,
   }
 
@@ -430,6 +433,7 @@ const normalizeMember = (member: FamilyMember): FamilyMember => {
     fatherId: member.fatherId ?? undefined,
     motherId: member.motherId ?? undefined,
     spouseId: member.spouseId ?? undefined,
+    formerSpouseId: member.formerSpouseId ?? undefined,
     spouseOnRight: member.spouseOnRight ?? undefined,
     isHidden: member.isHidden ?? undefined,
   }
@@ -587,6 +591,16 @@ const validateForm = (): boolean => {
     return false
   }
 
+  if (form.value.formerSpouseId && form.value.formerSpouseId === form.value.id) {
+    formError.value = 'Không thể chọn chính mình làm vợ/chồng trước.'
+    return false
+  }
+
+  if (form.value.formerSpouseId && form.value.formerSpouseId === form.value.spouseId) {
+    formError.value = 'Vợ/chồng trước không thể trùng với vợ/chồng hiện tại.'
+    return false
+  }
+
   return true
 }
 
@@ -678,6 +692,7 @@ const saveMember = async (): Promise<void> => {
     fatherId: form.value.fatherId || undefined,
     motherId: form.value.motherId || undefined,
     spouseId: form.value.spouseId || undefined,
+    formerSpouseId: form.value.formerSpouseId || undefined,
     spouseOnRight: form.value.spouseOnRight || undefined,
   }
 
@@ -1272,6 +1287,16 @@ onMounted(async () => {
           <SearchableMemberSelect
             v-model="form.spouseId"
             list-id="spouse-members"
+            :members="selectableMembers"
+            :disabled="isSaving"
+          />
+        </label>
+
+        <label>
+          Vợ/chồng trước (đã ly hôn)
+          <SearchableMemberSelect
+            v-model="form.formerSpouseId"
+            list-id="former-spouse-members"
             :members="selectableMembers"
             :disabled="isSaving"
           />

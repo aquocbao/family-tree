@@ -12,6 +12,8 @@ const props = withDefaults(
     memberById: (id?: string) => FamilyMember | undefined
     /** Parents of a married-in spouse (drawn at the same generation as this couple, next to it). */
     inLawParentsResolver?: (memberId: string) => FamilyUnit | undefined
+    /** Former spouses (divorced) drawn in this person's row */
+    formerSpousesResolver?: (memberId: string) => FamilyMember[]
     canManage?: boolean
     showBirthDate?: boolean
     showDeathDate?: boolean
@@ -66,6 +68,62 @@ const inLawGuests = computed(() => {
   return list
 })
 
+// ---- Former spouses (ly hôn) ----
+// Couple: spouse A's former spouses on the left of A, spouse B's on the right of B. Single: on the right.
+const exesLeft = computed(() =>
+  hasCouple.value && !displacedSpouse.value ? props.formerSpousesResolver?.(spouseA.value.id) ?? [] : [],
+)
+const exesRight = computed(() => {
+  if (hasCouple.value && !displacedSpouse.value) {
+    return props.formerSpousesResolver?.(spouseB.value.id) ?? []
+  }
+  return props.formerSpousesResolver?.(soloMember.value.id) ?? []
+})
+
+// Children split by marriage: each former marriage's children hang from its "ly hôn" line,
+// the current couple's children from the couple. FamilyTree draws the connecting lines.
+type ChildGroup = { key: string; a: string; b: string; units: FamilyUnit[] }
+const childGroups = computed<ChildGroup[]>(() => {
+  const left = exesLeft.value
+  const right = exesRight.value
+  if (left.length === 0 && right.length === 0) {
+    return []
+  }
+  const byEx = new Map<string, FamilyUnit[]>([...left, ...right].map((ex) => [ex.id, []]))
+  const main: FamilyUnit[] = []
+  for (const childUnit of childUnits.value) {
+    let exId: string | undefined
+    for (const member of childUnit.members) {
+      for (const parentId of [member.fatherId, member.motherId]) {
+        if (parentId && byEx.has(parentId)) {
+          exId = parentId
+        }
+      }
+    }
+    ;(exId ? byEx.get(exId) ?? main : main).push(childUnit)
+  }
+
+  const couple = hasCouple.value && !displacedSpouse.value
+  const leftHost = couple ? spouseA.value.id : soloMember.value.id
+  const rightHost = couple ? spouseB.value.id : soloMember.value.id
+  const groups: ChildGroup[] = []
+  for (const ex of left) {
+    if (byEx.get(ex.id)?.length) groups.push({ key: `ex-${ex.id}`, a: leftHost, b: ex.id, units: byEx.get(ex.id) ?? [] })
+  }
+  if (main.length) {
+    groups.push({
+      key: 'main',
+      a: couple ? spouseA.value.id : soloMember.value.id,
+      b: couple ? spouseB.value.id : soloMember.value.id,
+      units: main,
+    })
+  }
+  for (const ex of right) {
+    if (byEx.get(ex.id)?.length) groups.push({ key: `ex-${ex.id}`, a: rightHost, b: ex.id, units: byEx.get(ex.id) ?? [] })
+  }
+  return groups
+})
+
 const inLawSide = (child: FamilyMember): string => (child.gender === 'male' ? 'Bên nội' : 'Bên ngoại')
 
 // In a couple, the spouse whose own parents are in the tree is drawn under those parents (see inLawGuests of
@@ -110,6 +168,23 @@ const toggleExpanded = async (): Promise<void> => {
       <div class="unit-row" :class="{ 'has-guests': inLawGuests.length > 0 }">
       <div class="unit-main">
       <div v-if="hasCouple && !displacedSpouse" class="couple-row">
+        <template v-for="ex in exesLeft" :key="ex.id">
+          <PersonCard
+            :member="ex"
+            :spouse-name="memberNameById(ex.spouseId)"
+            :can-manage="canManage"
+            :show-birth-date="showBirthDate"
+            :show-death-date="showDeathDate"
+            :show-spouse="showSpouse"
+            :show-view-detail="showViewDetail"
+            :highlighted="highlightedMemberId === ex.id"
+            @view-detail="emit('viewDetail', $event)"
+            @edit="emit('edit', $event)"
+            @delete="emit('delete', $event)"
+            @toggle-hidden="emit('toggleHidden', $event)"
+          />
+          <div class="ex-line" aria-label="Đã ly hôn"><span>ly hôn</span></div>
+        </template>
         <PersonCard
           class="couple-a"
           :member="spouseA"
@@ -141,6 +216,23 @@ const toggleExpanded = async (): Promise<void> => {
           @delete="emit('delete', $event)"
           @toggle-hidden="emit('toggleHidden', $event)"
         />
+        <template v-for="ex in exesRight" :key="ex.id">
+          <div class="ex-line" aria-label="Đã ly hôn"><span>ly hôn</span></div>
+          <PersonCard
+            :member="ex"
+            :spouse-name="memberNameById(ex.spouseId)"
+            :can-manage="canManage"
+            :show-birth-date="showBirthDate"
+            :show-death-date="showDeathDate"
+            :show-spouse="showSpouse"
+            :show-view-detail="showViewDetail"
+            :highlighted="highlightedMemberId === ex.id"
+            @view-detail="emit('viewDetail', $event)"
+            @edit="emit('edit', $event)"
+            @delete="emit('delete', $event)"
+            @toggle-hidden="emit('toggleHidden', $event)"
+          />
+        </template>
       </div>
 
       <div v-else class="single-row">
@@ -158,6 +250,23 @@ const toggleExpanded = async (): Promise<void> => {
           @delete="emit('delete', $event)"
           @toggle-hidden="emit('toggleHidden', $event)"
         />
+        <template v-for="ex in exesRight" :key="ex.id">
+          <div class="ex-line" aria-label="Đã ly hôn"><span>ly hôn</span></div>
+          <PersonCard
+            :member="ex"
+            :spouse-name="memberNameById(ex.spouseId)"
+            :can-manage="canManage"
+            :show-birth-date="showBirthDate"
+            :show-death-date="showDeathDate"
+            :show-spouse="showSpouse"
+            :show-view-detail="showViewDetail"
+            :highlighted="highlightedMemberId === ex.id"
+            @view-detail="emit('viewDetail', $event)"
+            @edit="emit('edit', $event)"
+            @delete="emit('delete', $event)"
+            @toggle-hidden="emit('toggleHidden', $event)"
+          />
+        </template>
       </div>
       </div>
 
@@ -223,7 +332,7 @@ const toggleExpanded = async (): Promise<void> => {
     </div>
 
     <ul
-      v-if="hasChildren && isExpanded"
+      v-if="hasChildren && isExpanded && childGroups.length === 0"
       class="children"
       :data-couple-children="displacedSpouse ? soloMember.id : undefined"
     >
@@ -236,6 +345,7 @@ const toggleExpanded = async (): Promise<void> => {
         :member-name-by-id="memberNameById"
         :member-by-id="memberById"
         :in-law-parents-resolver="inLawParentsResolver"
+        :former-spouses-resolver="formerSpousesResolver"
         :can-manage="canManage"
         :show-birth-date="showBirthDate"
         :show-death-date="showDeathDate"
@@ -251,6 +361,41 @@ const toggleExpanded = async (): Promise<void> => {
         @toggle-hidden="emit('toggleHidden', $event)"
       />
     </ul>
+    <div v-else-if="hasChildren && isExpanded" class="children-groups">
+      <ul
+        v-for="group in childGroups"
+        :key="group.key"
+        class="children"
+        data-group-stem
+        :data-link-a="group.a"
+        :data-link-b="group.b"
+      >
+        <FamilyTreeNode
+          v-for="childUnit in group.units"
+          :key="childUnit.key"
+          :unit="childUnit"
+          :child-units-by-unit-key="childUnitsByUnitKey"
+          :child-units-resolver="childUnitsResolver"
+          :member-name-by-id="memberNameById"
+          :member-by-id="memberById"
+          :in-law-parents-resolver="inLawParentsResolver"
+          :former-spouses-resolver="formerSpousesResolver"
+          :can-manage="canManage"
+          :show-birth-date="showBirthDate"
+          :show-death-date="showDeathDate"
+          :show-spouse="showSpouse"
+          :show-view-detail="showViewDetail"
+          :depth="depth + 1"
+          :expand-depth="expandDepth"
+          :expand-request="expandRequest"
+          :highlighted-member-id="highlightedMemberId"
+          @view-detail="emit('viewDetail', $event)"
+          @edit="emit('edit', $event)"
+          @delete="emit('delete', $event)"
+          @toggle-hidden="emit('toggleHidden', $event)"
+        />
+      </ul>
+    </div>
   </li>
 </template>
 
@@ -320,6 +465,46 @@ const toggleExpanded = async (): Promise<void> => {
 /* FamilyTree draws this connector as one SVG line instead (see data-svg-stem) */
 .children[data-svg-stem]::before,
 .children[data-svg-stem] > .node::before {
+  display: none;
+}
+
+/* ---- divorce ---- */
+.ex-line {
+  position: relative;
+  width: 3.4rem;
+  border-top: 2px dashed #9b3a24;
+}
+
+.ex-line span {
+  position: absolute;
+  left: 50%;
+  bottom: 0.25rem;
+  transform: translateX(-50%);
+  font-size: 0.68rem;
+  font-style: italic;
+  color: #8a5a2b;
+  white-space: nowrap;
+}
+
+.single-row {
+  align-items: center;
+  gap: 0.55rem;
+}
+
+/* children of each marriage side by side; FamilyTree draws the lines from each marriage down to its group */
+.children-groups {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 2.5rem;
+  margin-top: 0.8rem;
+}
+
+.children-groups > .children {
+  margin-top: 0;
+}
+
+.children[data-group-stem]::before {
   display: none;
 }
 
