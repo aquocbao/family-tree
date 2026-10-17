@@ -186,6 +186,8 @@ const formatDate = (value?: string): string => {
 }
 
 .person-card {
+  display: flex;
+  flex-direction: column;
   background: #ffffff;
   border: 1px solid #d7dbe6;
   border-radius: 12px;
@@ -248,7 +250,9 @@ const formatDate = (value?: string): string => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-top: 0.75rem;
+  /* pinned to the bottom: cards of one generation share a height (set by FamilyTree) */
+  margin-top: auto;
+  padding-top: 0.75rem;
 }
 
 .actions button {

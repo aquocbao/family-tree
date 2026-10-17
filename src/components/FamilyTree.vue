@@ -553,9 +553,44 @@ const updateInLawLinks = (): void => {
   }
 }
 
+/**
+ * Every generation lines up: all cards of one depth get the height of the tallest one, so a parent with
+ * fewer fields doesn't pull its children's row higher than their cousins'.
+ * A married-in child (drawn under their own parents) belongs to the row below those parents.
+ */
+const equalizeCardHeights = (): void => {
+  const canvas = canvasRef.value
+  if (!canvas) return
+
+  const byDepth = new Map<number, HTMLElement[]>()
+  const add = (depth: number, card: HTMLElement) => {
+    const list = byDepth.get(depth) ?? []
+    list.push(card)
+    byDepth.set(depth, list)
+  }
+
+  for (const node of canvas.querySelectorAll<HTMLElement>('li.node[data-depth]')) {
+    const depth = Number(node.dataset.depth)
+    const content = node.querySelector<HTMLElement>(':scope > .unit-content')
+    if (!content) continue
+    for (const card of content.querySelectorAll<HTMLElement>('.person-card')) {
+      add(card.closest('.inlaw-child') ? depth + 1 : depth, card)
+    }
+  }
+
+  for (const cards of byDepth.values()) {
+    for (const card of cards) card.style.minHeight = ''
+    const tallest = Math.max(0, ...cards.map((card) => card.offsetHeight))
+    if (tallest > 0) {
+      for (const card of cards) card.style.minHeight = `${tallest}px`
+    }
+  }
+}
+
 const scheduleInLawLinks = (): void => {
   cancelAnimationFrame(linkFrame)
   linkFrame = requestAnimationFrame(() => {
+    equalizeCardHeights()
     balanceTreeRoot()
     updateInLawLinks()
   })

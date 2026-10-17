@@ -327,6 +327,38 @@
       "gender": "male",
       "fatherId": "NVVL",
       "motherId": "PTTM"
+    },
+    {
+      "id": "MTP",
+      "name": "MAI THÁI PHƯƠNG",
+      "position": 2,
+      "gender": "male",
+      "fatherId": "MVL",
+      "motherId": "PTNA"
+    },
+    {
+      "id": "MTD",
+      "name": "MAI THÁI ĐIỀN",
+      "position": 3,
+      "gender": "male",
+      "fatherId": "MVL",
+      "motherId": "PTNA"
+    },
+    {
+      "id": "MTN",
+      "name": "MAI THÁI NGỌC",
+      "position": 4,
+      "gender": "male",
+      "fatherId": "MVL",
+      "motherId": "PTNA"
+    },
+    {
+      "id": "MTNH",
+      "name": "MAI THỊ NGỌC HÀ",
+      "position": 5,
+      "gender": "female",
+      "fatherId": "MVL",
+      "motherId": "PTNA"
     }
   ],
   "settings": {
@@ -377,6 +409,30 @@
         "day": 30,
         "month": 12,
         "lastDayOfMonth": true
+      },
+      {
+        "name": "GPMN- Thống Nhất Đất Nước",
+        "day": 30,
+        "month": 4,
+        "calendar": "solar"
+      },
+      {
+        "name": "QT Lao Động",
+        "day": 1,
+        "month": 5,
+        "calendar": "solar"
+      },
+      {
+        "name": "Quốc Khánh CHXHCNVN",
+        "day": 2,
+        "month": 9,
+        "calendar": "solar"
+      },
+      {
+        "name": "Ngày Văn Hóa VN",
+        "day": 24,
+        "month": 11,
+        "calendar": "solar"
       }
     ]
   }

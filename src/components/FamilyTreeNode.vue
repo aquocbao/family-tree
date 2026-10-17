@@ -166,7 +166,7 @@ const toggleExpanded = async (): Promise<void> => {
 </script>
 
 <template>
-  <li class="node">
+  <li class="node" :data-depth="depth">
     <div ref="unitContentRef" class="unit-content">
       <div class="unit-row" :class="{ 'has-guests': inLawGuests.length > 0 }">
       <div class="unit-main">
