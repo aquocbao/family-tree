@@ -2243,4 +2243,26 @@ onMounted(async () => {
   font-weight: 400;
   color: #7a6a55;
 }
+
+/* very narrow phones (iPhone SE, small Androids): keep the title on one line */
+@media (max-width: 380px) {
+  .app-header {
+    padding-left: 0.8rem;
+    padding-right: 0.8rem;
+  }
+
+  .app-header h1 {
+    font-size: 1.55rem;
+    letter-spacing: 0.1em;
+    text-indent: 0.1em;
+    white-space: nowrap;
+  }
+
+  .app-header h2 {
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-indent: 0.12em;
+    white-space: nowrap;
+  }
+}
 </style>

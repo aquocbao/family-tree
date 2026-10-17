@@ -604,7 +604,15 @@ const toggleExpanded = async (): Promise<void> => {
 
 @media (max-width: 640px) {
   .inlaw-guests {
-    margin-left: 1.5rem;
+    margin-left: 1rem;
+  }
+
+  .ex-line {
+    width: 2.2rem;
+  }
+
+  .children-groups {
+    gap: 1.2rem;
   }
 
   .inlaw-cards {

@@ -761,6 +761,37 @@ const exitAnyFullView = async (): Promise<void> => {
   }
 }
 
+const isPhone = (): boolean => window.matchMedia('(max-width: 640px)').matches
+
+// Phones: pick the zoom so the top family row (both families side by side, if any) fits the screen.
+let hasAutoFitted = false
+const fitTopRowToScreen = async (): Promise<void> => {
+  if (hasAutoFitted || !isPhone()) {
+    return
+  }
+  await nextTick()
+  const wrapper = treeWrapperRef.value
+  const content = wrapper?.querySelector<HTMLElement>('.tree-root > .node > .unit-content')
+  if (!wrapper || !content) {
+    return
+  }
+  const row = content.querySelector<HTMLElement>(':scope > .unit-row')
+  const main = row?.querySelector<HTMLElement>(':scope > .unit-main')
+  const guests = row?.querySelector<HTMLElement>(':scope > .inlaw-guests')
+  // width at 100% zoom
+  const rowWidth = main
+    ? (guests ? guests.offsetLeft + guests.offsetWidth - main.offsetLeft : main.offsetWidth)
+    : content.offsetWidth
+  const available = wrapper.clientWidth - 24
+  if (rowWidth <= 0 || available <= 0) {
+    return
+  }
+  const fitted = Math.floor((available / rowWidth) * 20) / 20 // round down to 5%
+  zoom.value = Math.min(0.8, Math.max(ZOOM_MIN, fitted))
+  hasAutoFitted = true
+  void centerOnRoot()
+}
+
 const changeZoom = (delta: number): void => {
   const next = Math.round((zoom.value + delta) * 10) / 10
   zoom.value = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next))
@@ -892,8 +923,10 @@ watch(
   (hasMembers) => {
     if (hasMembers) {
       void centerOnRoot()
+      requestAnimationFrame(() => void fitTopRowToScreen())
     }
   },
+  { immediate: true },
 )
 
 watch(zoom, () => {
@@ -917,7 +950,7 @@ onMounted(() => {
   }
   document.addEventListener('fullscreenchange', syncFullViewState)
   syncFullViewState()
-  if (window.matchMedia('(max-width: 640px)').matches) {
+  if (isPhone()) {
     zoom.value = 0.8
   }
   void centerOnRoot()
@@ -984,19 +1017,34 @@ onBeforeUnmount(() => {
           <button type="button" class="zoom-value" title="Về 100%" @click="resetZoom">{{ Math.round(zoom * 100) }}%</button>
           <button type="button" aria-label="Phóng to" :disabled="zoom >= ZOOM_MAX" @click="changeZoom(ZOOM_STEP)">+</button>
         </div>
-        <button type="button" class="expand-all-btn" :aria-pressed="isAllExpanded" @click="toggleExpandAll">
-          {{ isAllExpanded ? 'Thu gọn tất cả' : 'Mở rộng tất cả' }}
+        <button
+          type="button"
+          class="expand-all-btn"
+          :aria-pressed="isAllExpanded"
+          :title="isAllExpanded ? 'Thu gọn tất cả' : 'Mở rộng tất cả'"
+          @click="toggleExpandAll"
+        >
+          <span class="btn-icon" aria-hidden="true">{{ isAllExpanded ? '⊟' : '⊞' }}</span>
+          <span class="btn-label">{{ isAllExpanded ? 'Thu gọn tất cả' : 'Mở rộng tất cả' }}</span>
         </button>
         <button
           type="button"
           class="search-toggle-btn"
           :aria-expanded="isSearchOpen"
+          :title="isSearchOpen ? 'Đóng tìm kiếm' : 'Tìm kiếm'"
           @click="toggleSearch"
         >
-          {{ isSearchOpen ? '✕ Đóng tìm kiếm' : '🔍 Tìm kiếm' }}
+          <span class="btn-icon" aria-hidden="true">{{ isSearchOpen ? '✕' : '🔍' }}</span>
+          <span class="btn-label">{{ isSearchOpen ? 'Đóng tìm kiếm' : 'Tìm kiếm' }}</span>
         </button>
-        <button type="button" class="full-view-btn" @click="toggleFullView">
-          {{ isFullView ? 'Thoát Full view' : 'Full view' }}
+        <button
+          type="button"
+          class="full-view-btn"
+          :title="isFullView ? 'Thoát Full view' : 'Full view'"
+          @click="toggleFullView"
+        >
+          <span class="btn-icon" aria-hidden="true">⛶</span>
+          <span class="btn-label">{{ isFullView ? 'Thoát Full view' : 'Full view' }}</span>
         </button>
       </div>
     </div>
@@ -1311,6 +1359,18 @@ onBeforeUnmount(() => {
   margin-left: auto;
 }
 
+.btn-icon {
+  margin-right: 0.35rem;
+}
+
+.expand-all-btn,
+.search-toggle-btn,
+.full-view-btn {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
 .expand-all-btn {
   border: 1px solid #a77f48;
   border-radius: 8px;
@@ -1406,8 +1466,8 @@ onBeforeUnmount(() => {
   .tree-wrapper {
     /* phones show a single page: no spine in the middle */
     --book-spine: linear-gradient(transparent, transparent);
-    border-width: 8px;
-    padding: 0.9rem 0.9rem 1.2rem;
+    border-width: 5px;
+    padding: 0.6rem 0.35rem 0.9rem;
     background-position:
       left 12px top 6px,
       right 12px top 6px,
@@ -1418,15 +1478,16 @@ onBeforeUnmount(() => {
       left top,
       right top,
       0 0;
+    /* no corner ornaments on phones; thin page edges */
     background-size:
-      70px 70px,
-      70px 70px,
-      70px 70px,
-      70px 70px,
+      0 0,
+      0 0,
+      0 0,
+      0 0,
       100% 100%,
       100% 100%,
-      7px 100%,
-      7px 100%,
+      4px 100%,
+      4px 100%,
       480px 480px;
   }
 
@@ -1452,10 +1513,35 @@ onBeforeUnmount(() => {
   }
 
   .expand-all-btn,
+  /* phones: icon-only buttons, all on one row */
   .search-toggle-btn,
-  .full-view-btn {
-    padding: 0.35rem 0.6rem;
-    font-size: 0.85rem;
+  .full-view-btn,
+  .expand-all-btn {
+    padding: 0.3rem 0.55rem;
+    font-size: 0.95rem;
+    line-height: 1.2;
+  }
+
+  .btn-label {
+    display: none;
+  }
+
+  .btn-icon {
+    margin-right: 0;
+  }
+
+  .control-buttons {
+    flex-wrap: nowrap;
+  }
+
+  .zoom-controls button {
+    min-width: 1.8rem;
+    padding: 0.3rem 0.35rem;
+  }
+
+  .zoom-controls .zoom-value {
+    min-width: 2.8rem;
+    font-size: 0.78rem;
   }
 
   .detail-toolbar {
