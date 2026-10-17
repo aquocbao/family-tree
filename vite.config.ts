@@ -15,6 +15,8 @@ type RawMember = {
   birthDate?: unknown
   deathDate?: unknown
   deathDateLunar?: unknown
+  memorialPlace?: unknown
+  memorialHostId?: unknown
   gender?: unknown
   fatherId?: unknown
   motherId?: unknown
@@ -28,6 +30,7 @@ type RawSettings = {
   showDeathDate?: unknown
   showSpouse?: unknown
   showViewDetail?: unknown
+  showMemorialPlace?: unknown
   showDateInfo?: unknown
   notificationMonths?: unknown
   lunarEvents?: unknown
@@ -96,6 +99,8 @@ const isValidMember = (value: unknown): value is RawMember => {
     isOptionalString(member.birthDate) &&
     isOptionalString(member.deathDate) &&
     isOptionalString(member.deathDateLunar) &&
+    isOptionalString(member.memorialPlace) &&
+    isOptionalString(member.memorialHostId) &&
     isOptionalString(member.fatherId) &&
     isOptionalString(member.motherId) &&
     isOptionalString(member.spouseId) &&
@@ -119,6 +124,7 @@ const isValidSettings = (value: unknown): value is RawSettings => {
     (settings.showDeathDate === undefined || typeof settings.showDeathDate === 'boolean') &&
     (settings.showSpouse === undefined || typeof settings.showSpouse === 'boolean') &&
     (settings.showViewDetail === undefined || typeof settings.showViewDetail === 'boolean') &&
+    (settings.showMemorialPlace === undefined || typeof settings.showMemorialPlace === 'boolean') &&
     (settings.showDateInfo === undefined || typeof settings.showDateInfo === 'boolean') &&
     (settings.notificationMonths === undefined ||
       (typeof settings.notificationMonths === 'number' &&
@@ -155,6 +161,7 @@ const withDefaultSettings = (value: unknown): Record<string, unknown> => {
     showDeathDate: s.showDeathDate ?? legacy ?? true,
     showSpouse: s.showSpouse ?? true,
     showViewDetail: s.showViewDetail ?? true,
+    showMemorialPlace: s.showMemorialPlace ?? true,
     notificationMonths: s.notificationMonths ?? 3,
     lunarEvents: s.lunarEvents ?? DEFAULT_LUNAR_EVENTS,
   }

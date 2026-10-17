@@ -10,6 +10,8 @@ const props = withDefaults(
     childUnitsResolver: (unitKey: string) => FamilyUnit[]
     memberNameById: (id?: string) => string | undefined
     memberById: (id?: string) => FamilyMember | undefined
+    /** Parents of a married-in spouse (drawn at the same generation as this couple, next to it). */
+    inLawParentsResolver?: (memberId: string) => FamilyUnit | undefined
     canManage?: boolean
     showBirthDate?: boolean
     showDeathDate?: boolean
@@ -45,6 +47,35 @@ const hasCouple = computed(() => members.value.length === 2)
 const spouseA = computed(() => members.value[0])
 const spouseB = computed(() => members.value[1])
 const childUnits = computed(() => props.childUnitsResolver(props.unit.key))
+// The other family of a married child (e.g. the bride's parents): drawn on this row, next to this couple,
+// so both sets of parents sit at the same level. FamilyTree draws a dashed link down to their child.
+const inLawGuests = computed(() => {
+  const resolver = props.inLawParentsResolver
+  if (!resolver) {
+    return []
+  }
+  const list: { unit: FamilyUnit; child: FamilyMember }[] = []
+  for (const childUnit of childUnits.value) {
+    for (const member of childUnit.members) {
+      const parents = resolver(member.id)
+      if (parents) {
+        list.push({ unit: parents, child: member })
+      }
+    }
+  }
+  return list
+})
+
+const inLawSide = (child: FamilyMember): string => (child.gender === 'male' ? 'Bên nội' : 'Bên ngoại')
+
+// In a couple, the spouse whose own parents are in the tree is drawn under those parents (see inLawGuests of
+// the parent row), not next to their partner. This node then shows only the partner.
+const displacedSpouse = computed(() =>
+  hasCouple.value ? members.value.find((member) => props.inLawParentsResolver?.(member.id)) : undefined,
+)
+const soloMember = computed(() =>
+  displacedSpouse.value ? members.value.find((member) => member.id !== displacedSpouse.value?.id) ?? members.value[0] : members.value[0],
+)
 const hasChildren = computed(() => childUnits.value.length > 0)
 const isExpanded = ref(props.depth <= props.expandDepth)
 
@@ -76,8 +107,11 @@ const toggleExpanded = async (): Promise<void> => {
 <template>
   <li class="node">
     <div ref="unitContentRef" class="unit-content">
-      <div v-if="hasCouple" class="couple-row">
+      <div class="unit-row" :class="{ 'has-guests': inLawGuests.length > 0 }">
+      <div class="unit-main">
+      <div v-if="hasCouple && !displacedSpouse" class="couple-row">
         <PersonCard
+          class="couple-a"
           :member="spouseA"
           :spouse-name="memberNameById(spouseA.spouseId)"
           :can-manage="canManage"
@@ -93,6 +127,7 @@ const toggleExpanded = async (): Promise<void> => {
         />
         <div class="spouse-line" aria-hidden="true"></div>
         <PersonCard
+          class="couple-b"
           :member="spouseB"
           :spouse-name="memberNameById(spouseB.spouseId)"
           :can-manage="canManage"
@@ -110,24 +145,75 @@ const toggleExpanded = async (): Promise<void> => {
 
       <div v-else class="single-row">
         <PersonCard
-          :member="members[0]"
-          :spouse-name="memberNameById(members[0].spouseId)"
+          :member="soloMember"
+          :spouse-name="memberNameById(soloMember.spouseId)"
           :can-manage="canManage"
           :show-birth-date="showBirthDate"
           :show-death-date="showDeathDate"
           :show-spouse="showSpouse"
           :show-view-detail="showViewDetail"
-          :highlighted="highlightedMemberId === members[0].id"
+          :highlighted="highlightedMemberId === soloMember.id"
           @view-detail="emit('viewDetail', $event)"
           @edit="emit('edit', $event)"
           @delete="emit('delete', $event)"
           @toggle-hidden="emit('toggleHidden', $event)"
         />
       </div>
+      </div>
+
+      <div v-if="inLawGuests.length > 0" class="inlaw-guests">
+        <div
+          v-for="guest in inLawGuests"
+          :key="guest.unit.key"
+          class="inlaw-guest"
+          :data-inlaw-for="guest.child.id"
+          :data-inlaw-spouse="guest.child.spouseId"
+        >
+          <span class="inlaw-tag">{{ inLawSide(guest.child) }} · Cha mẹ của {{ guest.child.name }}</span>
+          <div class="inlaw-cards">
+            <template v-for="(member, index) in guest.unit.members" :key="member.id">
+              <div v-if="index > 0" class="spouse-line" aria-hidden="true"></div>
+              <PersonCard
+                :member="member"
+                :spouse-name="memberNameById(member.spouseId)"
+                :can-manage="canManage"
+                :show-birth-date="showBirthDate"
+                :show-death-date="showDeathDate"
+                :show-spouse="showSpouse"
+                :show-view-detail="showViewDetail"
+                :highlighted="highlightedMemberId === member.id"
+                @view-detail="emit('viewDetail', $event)"
+                @edit="emit('edit', $event)"
+                @delete="emit('delete', $event)"
+                @toggle-hidden="emit('toggleHidden', $event)"
+              />
+            </template>
+          </div>
+          <!-- The married-in child, placed under their own parents and level with their partner (FamilyTree positions it) -->
+          <div class="inlaw-child">
+            <PersonCard
+              :member="guest.child"
+              :spouse-name="memberNameById(guest.child.spouseId)"
+              :can-manage="canManage"
+              :show-birth-date="showBirthDate"
+              :show-death-date="showDeathDate"
+              :show-spouse="showSpouse"
+              :show-view-detail="showViewDetail"
+              :highlighted="highlightedMemberId === guest.child.id"
+              @view-detail="emit('viewDetail', $event)"
+              @edit="emit('edit', $event)"
+              @delete="emit('delete', $event)"
+              @toggle-hidden="emit('toggleHidden', $event)"
+            />
+          </div>
+        </div>
+      </div>
+      </div>
 
       <button
         v-if="hasChildren"
         class="toggle"
+        :data-couple-toggle="displacedSpouse ? soloMember.id : undefined"
         type="button"
         :aria-expanded="isExpanded"
         @click="toggleExpanded"
@@ -136,7 +222,11 @@ const toggleExpanded = async (): Promise<void> => {
       </button>
     </div>
 
-    <ul v-if="hasChildren && isExpanded" class="children">
+    <ul
+      v-if="hasChildren && isExpanded"
+      class="children"
+      :data-couple-children="displacedSpouse ? soloMember.id : undefined"
+    >
       <FamilyTreeNode
         v-for="childUnit in childUnits"
         :key="childUnit.key"
@@ -145,6 +235,7 @@ const toggleExpanded = async (): Promise<void> => {
         :child-units-resolver="childUnitsResolver"
         :member-name-by-id="memberNameById"
         :member-by-id="memberById"
+        :in-law-parents-resolver="inLawParentsResolver"
         :can-manage="canManage"
         :show-birth-date="showBirthDate"
         :show-death-date="showDeathDate"
@@ -195,6 +286,11 @@ const toggleExpanded = async (): Promise<void> => {
   border-top: 2px solid #9b3a24;
 }
 
+/* Moved sideways by FamilyTree so a split couple's children hang from the middle of the marriage line */
+[data-couple-toggle] {
+  position: relative;
+}
+
 .toggle {
   border: 1px solid #b8892f;
   border-radius: 999px;
@@ -218,7 +314,18 @@ const toggleExpanded = async (): Promise<void> => {
   display: flex;
   justify-content: center;
   gap: 0.8rem;
-  border-top: 2px solid #a8553a;
+  border-top: 2px solid #9b3a24;
+}
+
+/* FamilyTree draws this connector as one SVG line instead (see data-svg-stem) */
+.children[data-svg-stem]::before,
+.children[data-svg-stem] > .node::before {
+  display: none;
+}
+
+/* a single child hangs on a straight vertical line: no horizontal bar */
+.children:has(> .node:only-child) {
+  border-top-color: transparent;
 }
 
 .children::before {
@@ -228,7 +335,7 @@ const toggleExpanded = async (): Promise<void> => {
   left: 50%;
   width: 0;
   height: 1rem;
-  border-left: 2px solid #a8553a;
+  border-left: 2px solid #9b3a24;
   transform: translateX(-50%);
 }
 
@@ -243,11 +350,82 @@ const toggleExpanded = async (): Promise<void> => {
   left: 50%;
   width: 0;
   height: 1rem;
-  border-left: 2px solid #a8553a;
+  border-left: 2px solid #9b3a24;
   transform: translateX(-50%);
 }
 
+/* Row = this couple, plus (optionally) a child-in-law's parents on the right at the same level.
+   1fr | couple | 1fr keeps the couple centred over its children. */
+.unit-row {
+  display: flex;
+  justify-content: center;
+}
+
+.unit-row.has-guests {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+}
+
+.unit-row.has-guests .unit-main {
+  grid-column: 2;
+}
+
+.inlaw-guests {
+  grid-column: 3;
+  justify-self: start;
+  display: flex;
+  gap: 1.5rem;
+  margin-left: 3rem;
+}
+
+.inlaw-guest {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* small caption above the left person, outside the flow so the cards line up with the other parents */
+.inlaw-tag {
+  position: absolute;
+  left: 0.2rem;
+  bottom: calc(100% + 0.2rem);
+  font-size: 0.74rem;
+  font-style: italic;
+  font-weight: 600;
+  color: #8a5a2b;
+  white-space: nowrap;
+}
+
+.inlaw-cards {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+/* Out of the normal flow: FamilyTree sets "top" so this card sits level with the partner it married */
+.inlaw-child {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 2.5rem);
+  visibility: hidden;
+  z-index: 1;
+}
+
+.inlaw-child.is-placed {
+  visibility: visible;
+}
+
 @media (max-width: 640px) {
+  .inlaw-guests {
+    margin-left: 1.5rem;
+  }
+
+  .inlaw-cards {
+    gap: 0.3rem;
+  }
+
   .node {
     padding: 0 0.3rem 0.7rem;
   }

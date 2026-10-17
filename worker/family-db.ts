@@ -43,6 +43,8 @@ const isValidMember = (value: unknown): boolean => {
     isOptionalString(m.birthDate) &&
     isOptionalString(m.deathDate) &&
     isOptionalString(m.deathDateLunar) &&
+    isOptionalString(m.memorialPlace) &&
+    isOptionalString(m.memorialHostId) &&
     isOptionalString(m.fatherId) &&
     isOptionalString(m.motherId) &&
     isOptionalString(m.spouseId) &&
@@ -57,7 +59,7 @@ const isValidSettings = (value: unknown): boolean => {
   const s = value as Record<string, unknown>
   const months = s.notificationMonths
   return (
-    ['showBirthDate', 'showDeathDate', 'showSpouse', 'showViewDetail', 'showDateInfo'].every((k) => isOptionalBool(s[k])) &&
+    ['showBirthDate', 'showDeathDate', 'showSpouse', 'showViewDetail', 'showDateInfo', 'showMemorialPlace'].every((k) => isOptionalBool(s[k])) &&
     (months === undefined || (typeof months === 'number' && Number.isInteger(months) && months >= 0 && months <= 12)) &&
     (s.lunarEvents === undefined || isValidLunarEventList(s.lunarEvents))
   )
@@ -167,6 +169,7 @@ const withDefaultSettings = (value: unknown): Record<string, unknown> => {
     showDeathDate: s.showDeathDate ?? legacy ?? true,
     showSpouse: s.showSpouse ?? true,
     showViewDetail: s.showViewDetail ?? true,
+    showMemorialPlace: s.showMemorialPlace ?? true,
     notificationMonths: s.notificationMonths ?? 3,
     lunarEvents: s.lunarEvents ?? DEFAULT_LUNAR_EVENTS,
   }

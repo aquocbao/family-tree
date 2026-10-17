@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ADMIN_PATH, SUPER_ADMIN_PATH } from './admin-paths'
 import FamilyTree from './components/FamilyTree.vue'
 import SearchableMemberSelect from './components/SearchableMemberSelect.vue'
 import { fetchFamilyDatabase, saveFamilyDatabase } from './data/family-db-api'
 import { solarDateTextToLunarText } from './utils/lunar'
+import { isDeceased as isDeceasedMember } from './utils/memorial'
 import {
   DEFAULT_LUNAR_EVENTS,
   MAX_LUNAR_EVENTS,
@@ -23,6 +24,7 @@ type MemberForm = {
   birthDate: string
   deathDate: string
   deathDateLunar: string
+  memorialHostId: string
   gender: FamilyGender
   fatherId: string
   motherId: string
@@ -41,6 +43,7 @@ const defaultTreeSettings = (): FamilyTreeSettings => ({
   showDeathDate: true,
   showSpouse: true,
   showViewDetail: true,
+  showMemorialPlace: true,
   notificationMonths: 3,
   lunarEvents: cloneLunarEvents(DEFAULT_LUNAR_EVENTS),
 })
@@ -55,6 +58,7 @@ const emptyForm = (): MemberForm => ({
   birthDate: '',
   deathDate: '',
   deathDateLunar: '',
+  memorialHostId: '',
   gender: 'other',
   fatherId: '',
   motherId: '',
@@ -155,10 +159,79 @@ const showBirthDate = ref(true)
 const showDeathDate = ref(true)
 const showSpouseInfo = ref(true)
 const showViewDetailAction = ref(true)
+const showMemorialPlace = ref(true)
 const notificationMonths = ref(3)
 const lunarEvents = ref<LunarEvent[]>(cloneLunarEvents(DEFAULT_LUNAR_EVENTS))
 const hasLoadedDatabase = ref(false)
 const suppressSettingsSync = ref(false)
+// Câu đối ca ngợi đức tổ và gia đạo hưng thịnh (read top → bottom).
+// Facing the page, vế phải hangs on the right and vế trái on the left.
+const COUPLET_RIGHT = {
+  chars: ['敬', '祖', '承', '宗', '家', '道', '盛'],
+  readings: ['Kính', 'Tổ', 'Thừa', 'Tông', 'Gia', 'Đạo', 'Thịnh'],
+  meaning: 'Kính tổ, nối tông, gia đạo thịnh vượng',
+}
+const COUPLET_LEFT = {
+  chars: ['傳', '孝', '報', '恩', '子', '孫', '昌'],
+  readings: ['Truyền', 'Hiếu', 'Báo', 'Ân', 'Tử', 'Tôn', 'Xương'],
+  meaning: 'Truyền hiếu báo ơn, con cháu hưng thịnh',
+}
+
+// Sticky title plaque + câu đối layout helpers
+const appHeaderRef = ref<HTMLElement | null>(null)
+const headerBandRef = ref<HTMLElement | null>(null)
+const coupletSpacerRef = ref<HTMLElement | null>(null)
+const isHeaderCompact = ref(false)
+
+// Compact title bar after scrolling down a bit (two thresholds so it doesn't flicker at the edge).
+const onWindowScroll = (): void => {
+  const y = window.scrollY
+  if (!isHeaderCompact.value && y > 120) {
+    isHeaderCompact.value = true
+  } else if (isHeaderCompact.value && y < 40) {
+    isHeaderCompact.value = false
+  }
+}
+
+const updateTitleLayout = (): void => {
+  const band = headerBandRef.value
+  const header = appHeaderRef.value
+  if (band && header && !isHeaderCompact.value) {
+    // The band keeps the full plaque's height in the page flow, so shrinking it never makes the page jump.
+    band.style.setProperty('--band-h', `${Math.round(header.offsetHeight + 28)}px`) // plaque + space below
+  }
+
+  const spacer = coupletSpacerRef.value
+  const couplet = document.querySelector<HTMLElement>('.couplet--left')
+  if (!spacer || !couplet) {
+    return
+  }
+
+  if (getComputedStyle(couplet).position !== 'absolute') {
+    spacer.style.height = '0px' // wide screens: scrolls are fixed at the sides
+    return
+  }
+
+  // Tablets/phones: scrolls hang beside the plaque; push the tree below their bottom edge.
+  spacer.style.height = '0px'
+  const coupletBottom = couplet.offsetTop + couplet.offsetHeight
+  const spacerTop = spacer.offsetTop
+  spacer.style.height = `${Math.max(0, coupletBottom - spacerTop + 16)}px`
+}
+
+onMounted(() => {
+  updateTitleLayout()
+  onWindowScroll()
+  window.addEventListener('resize', updateTitleLayout)
+  window.addEventListener('scroll', onWindowScroll, { passive: true })
+  void document.fonts?.ready.then(updateTitleLayout)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateTitleLayout)
+  window.removeEventListener('scroll', onWindowScroll)
+})
+
 const route = useRoute()
 const router = useRouter()
 
@@ -185,6 +258,11 @@ const members = computed<FamilyMember[]>(() => {
 
   return pendingMembers.value ?? approvedMembers.value
 })
+
+// Living members (no lunar death date), for "Nơi tổ chức đám giỗ"
+const livingMembers = computed(() =>
+  members.value.filter((member) => member.id !== editingId.value && !isDeceasedMember(member)),
+)
 
 const selectableMembers = computed(() => {
   return members.value.filter((member) => member.id !== editingId.value)
@@ -326,6 +404,7 @@ const startEditMember = (id: string): void => {
     birthDate: formatDateForAdmin(member.birthDate),
     deathDate: formatDateForAdmin(member.deathDate),
     deathDateLunar: member.deathDateLunar ?? '',
+    memorialHostId: member.memorialHostId ?? '',
     gender: member.gender,
     fatherId: member.fatherId ?? '',
     motherId: member.motherId ?? '',
@@ -346,6 +425,8 @@ const normalizeMember = (member: FamilyMember): FamilyMember => {
     birthDate: member.birthDate ?? undefined,
     deathDate: member.deathDate ?? undefined,
     deathDateLunar: member.deathDateLunar ?? undefined,
+    memorialPlace: member.memorialPlace ?? undefined,
+    memorialHostId: member.memorialHostId ?? undefined,
     fatherId: member.fatherId ?? undefined,
     motherId: member.motherId ?? undefined,
     spouseId: member.spouseId ?? undefined,
@@ -370,6 +451,7 @@ const applyTreeSettings = (settings: FamilyTreeSettings): void => {
   showDeathDate.value = settings.showDeathDate
   showSpouseInfo.value = settings.showSpouse
   showViewDetailAction.value = settings.showViewDetail
+  showMemorialPlace.value = settings.showMemorialPlace ?? true
   notificationMonths.value = settings.notificationMonths ?? 3
   const nextEvents = cloneLunarEvents(settings.lunarEvents ?? DEFAULT_LUNAR_EVENTS)
   // Only replace the array when the content changed (a new array would re-trigger the settings watcher).
@@ -384,6 +466,7 @@ const getTreeSettings = (): FamilyTreeSettings => ({
   showDeathDate: showDeathDate.value,
   showSpouse: showSpouseInfo.value,
   showViewDetail: showViewDetailAction.value,
+  showMemorialPlace: showMemorialPlace.value,
   notificationMonths: notificationMonths.value,
   lunarEvents: cloneLunarEvents(lunarEvents.value),
 })
@@ -580,12 +663,17 @@ const saveMember = async (): Promise<void> => {
   const positionText = normalizePositionInput(form.value.position)
 
   const payload: FamilyMember = {
-    id: form.value.id.trim(),
+    id: isEditing.value && editingId.value ? editingId.value : form.value.id.trim(),
     name: form.value.name.trim(),
     position: positionText ? Number(positionText) : undefined,
     birthDate: birthIso,
     deathDate: deathIso,
     deathDateLunar: form.value.deathDateLunar.trim() || undefined,
+    memorialHostId: form.value.memorialHostId || undefined,
+    // keep an older free-text place only while no host is chosen
+    memorialPlace: form.value.memorialHostId
+      ? undefined
+      : members.value.find((m) => m.id === editingId.value)?.memorialPlace,
     gender: form.value.gender,
     fatherId: form.value.fatherId || undefined,
     motherId: form.value.motherId || undefined,
@@ -804,9 +892,9 @@ watch(isEditableMode, (currentMode) => {
   }
 })
 
-watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notificationMonths, lunarEvents], async (
-  [nextBirthDate, nextDeathDate, nextSpouse, nextDetail, nextMonths, nextEvents],
-  [previousBirthDate, previousDeathDate, previousSpouse, previousDetail, previousMonths, previousEvents],
+watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notificationMonths, lunarEvents, showMemorialPlace], async (
+  [nextBirthDate, nextDeathDate, nextSpouse, nextDetail, nextMonths, nextEvents, nextPlace],
+  [previousBirthDate, previousDeathDate, previousSpouse, previousDetail, previousMonths, previousEvents, previousPlace],
 ) => {
   if (
     suppressSettingsSync.value ||
@@ -818,8 +906,23 @@ watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notif
       nextSpouse === previousSpouse &&
       nextDetail === previousDetail &&
       nextMonths === previousMonths &&
+      nextPlace === previousPlace &&
       JSON.stringify(nextEvents) === JSON.stringify(previousEvents)
     )
+  ) {
+    return
+  }
+
+  // Loading the page (or switching mode) just shows the stored settings: never save those back.
+  const stored = getModeSettings(mode.value)
+  if (
+    nextBirthDate === stored.showBirthDate &&
+    nextDeathDate === stored.showDeathDate &&
+    nextSpouse === stored.showSpouse &&
+    nextDetail === stored.showViewDetail &&
+    nextPlace === (stored.showMemorialPlace ?? true) &&
+    nextMonths === (stored.notificationMonths ?? 3) &&
+    JSON.stringify(nextEvents) === JSON.stringify(cloneLunarEvents(stored.lunarEvents ?? DEFAULT_LUNAR_EVENTS))
   ) {
     return
   }
@@ -831,6 +934,7 @@ watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notif
       showDeathDate: nextDeathDate,
       showSpouse: nextSpouse,
       showViewDetail: nextDetail,
+      showMemorialPlace: nextPlace,
       notificationMonths: nextMonths,
       lunarEvents: cloneLunarEvents(nextEvents),
     },
@@ -841,6 +945,7 @@ watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notif
     showDeathDate.value = previousDeathDate
     showSpouseInfo.value = previousSpouse
     showViewDetailAction.value = previousDetail
+    showMemorialPlace.value = previousPlace
     notificationMonths.value = previousMonths
     lunarEvents.value = previousEvents
     resetLunarEventsDraft()
@@ -922,10 +1027,30 @@ onMounted(async () => {
 
 <template>
   <main class="app">
-    <header class="app-header">
-      <h1>范氏家谱</h1>
-      <h2>PHẠM THỊ</h2>
-    </header>
+    <aside class="couplet couplet--left" :title="`Vế trái: ${COUPLET_LEFT.meaning}`" :aria-label="`Câu đối, vế trái: ${COUPLET_LEFT.meaning}`">
+      <span v-for="(char, index) in COUPLET_LEFT.chars" :key="index" class="couplet-cell" aria-hidden="true">
+        <span class="couplet-char">{{ char }}</span>
+        <span class="couplet-reading">{{ COUPLET_LEFT.readings[index] }}</span>
+      </span>
+    </aside>
+    <aside class="couplet couplet--right" :title="`Vế phải: ${COUPLET_RIGHT.meaning}`" :aria-label="`Câu đối, vế phải: ${COUPLET_RIGHT.meaning}`">
+      <span v-for="(char, index) in COUPLET_RIGHT.chars" :key="index" class="couplet-cell" aria-hidden="true">
+        <span class="couplet-char">{{ char }}</span>
+        <span class="couplet-reading">{{ COUPLET_RIGHT.readings[index] }}</span>
+      </span>
+    </aside>
+
+    <!-- Title band: full plaque at the top; once you scroll it becomes a slim bar that stays on top -->
+    <div ref="headerBandRef" class="header-band" :class="{ 'is-compact': isHeaderCompact }">
+      <div class="header-band-bar">
+        <header ref="appHeaderRef" class="app-header">
+          <h1>范氏家谱</h1>
+          <h2>PHẠM THỊ GIA PHẢ</h2>
+        </header>
+      </div>
+    </div>
+    <!-- tablets/phones: keeps the tree below the câu đối scrolls (height set in script) -->
+    <div ref="coupletSpacerRef" class="couplet-spacer" aria-hidden="true"></div>
 
     <section v-if="isEditableMode" class="mode-panel">
       <h2>Chế độ</h2>
@@ -1032,7 +1157,16 @@ onMounted(async () => {
         <form class="member-form" @submit.prevent="saveMember">
         <label>
           ID
-          <input v-model="form.id" type="text" required :disabled="isSaving" />
+          <input
+            v-model="form.id"
+            type="text"
+            required
+            :disabled="isSaving"
+            :readonly="isEditing"
+            :class="{ 'is-locked': isEditing }"
+            :title="isEditing ? 'Không thể đổi ID khi chỉnh sửa' : undefined"
+          />
+          <small v-if="isEditing" class="field-hint">ID không thể thay đổi khi chỉnh sửa.</small>
         </label>
 
         <label>
@@ -1091,6 +1225,17 @@ onMounted(async () => {
                 : 'Nhập khi chỉ biết ngày giỗ âm lịch.'
             }}
           </small>
+        </label>
+
+        <label>
+          Nơi tổ chức đám giỗ (nhà của)
+          <SearchableMemberSelect
+            v-model="form.memorialHostId"
+            list-id="memorial-host-members"
+            :members="livingMembers"
+            placeholder="Chọn người còn sống"
+            :disabled="isSaving"
+          />
         </label>
 
         <label>
@@ -1170,6 +1315,10 @@ onMounted(async () => {
           <input v-model="showViewDetailAction" type="checkbox" />
           Hiển thị nút xem chi tiết
         </label>
+        <label class="setting-toggle">
+          <input v-model="showMemorialPlace" type="checkbox" />
+          Hiển thị nơi tổ chức đám giỗ
+        </label>
         <label class="setting-select">
           Thanh thông báo (ngày giỗ, Lễ Tết) hiển thị trong
           <select v-model.number="notificationMonths">
@@ -1239,6 +1388,7 @@ onMounted(async () => {
       :show-death-date="showDeathDate"
       :show-spouse="showSpouseInfo"
       :show-view-detail="showViewDetailAction"
+      :show-memorial-place="showMemorialPlace"
       :notification-months="notificationMonths"
       :lunar-events="lunarEvents"
       @edit-member="startEditMember"
@@ -1250,10 +1400,79 @@ onMounted(async () => {
 
 <style scoped>
 .app {
+  --app-pad-x: 2rem;
   width: 100%;
   max-width: none;
   margin: 0;
-  padding: 2rem 2rem 3rem;
+  padding: 2rem var(--app-pad-x) 3rem;
+}
+
+/* ---------- Title band ---------- */
+.header-band {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  /* full width of the page (cancel the page side padding) */
+  margin: 0 calc(-1 * var(--app-pad-x));
+  padding: 0 var(--app-pad-x);
+  /* keeps the full plaque's height in the page so nothing jumps when it shrinks */
+  height: var(--band-h, auto);
+  pointer-events: none;
+}
+
+.header-band-bar {
+  pointer-events: auto;
+  transition: background-color 0.25s ease, box-shadow 0.25s ease, padding 0.25s ease;
+}
+
+.header-band .app-header {
+  margin: 0 auto;
+  transition: padding 0.25s ease, width 0.25s ease;
+}
+
+.header-band .app-header h1,
+.header-band .app-header h2 {
+  transition: font-size 0.25s ease, letter-spacing 0.25s ease, margin 0.25s ease;
+}
+
+/* compact: slim bar across the top with a solid background, plaque on one line */
+.header-band.is-compact .header-band-bar {
+  margin: 0 calc(-1 * var(--app-pad-x));
+  padding: 0;
+  box-shadow: 0 6px 16px rgba(60, 25, 8, 0.3);
+}
+
+/* compact: the red plaque spans the full width of the window */
+.header-band.is-compact .app-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 1.1rem;
+  width: 100%;
+  max-width: none;
+  padding: 0.45rem 2.2rem 0.5rem;
+  border-width: 0 0 2px;
+  border-radius: 0;
+  box-shadow:
+    inset 0 -4px 0 #7d1b14,
+    inset 0 -5px 0 rgba(241, 212, 138, 0.6);
+}
+
+.header-band.is-compact .app-header h1 {
+  margin: 0;
+  font-size: 1.55rem;
+  letter-spacing: 0.15em;
+}
+
+.header-band.is-compact .app-header h2 {
+  font-size: 0.85rem;
+  letter-spacing: 0.22em;
+}
+
+.header-band.is-compact .app-header::before,
+.header-band.is-compact .app-header::after {
+  width: 28px;
+  height: 28px;
 }
 
 .app-header {
@@ -1418,7 +1637,7 @@ onMounted(async () => {
 }
 
 .editor-panel {
-  scroll-margin-top: 16px;
+  scroll-margin-top: 90px; /* clear the slim title bar */
 }
 
 .editor-panel--flash {
@@ -1748,10 +1967,173 @@ onMounted(async () => {
   font-weight: 600;
 }
 
+/* ---------- Câu đối (hanging couplet scrolls): chữ Hán + âm Hán-Việt ---------- */
+.couplet {
+  --char-size: min(3.4rem, 5.5vh);
+  position: fixed;
+  top: 50%;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--char-size) * 0.12);
+  width: calc(var(--char-size) * 1.9);
+  padding: calc(var(--char-size) * 0.45) 0;
+  transform: translateY(-50%);
+  color: #f6d77e;
+  text-shadow: 0 1px 0 rgba(40, 8, 4, 0.6);
+  background:
+    radial-gradient(circle at 50% 8%, rgba(255, 220, 150, 0.18), transparent 40%),
+    linear-gradient(90deg, #7a1810, #a52a1c 30%, #a52a1c 70%, #7a1810);
+  border: 2px solid #c9a24a;
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 3px #8a1f15,
+    inset 0 0 0 4px rgba(241, 212, 138, 0.6),
+    0 10px 22px rgba(50, 15, 5, 0.35);
+  user-select: none;
+}
+
+.couplet-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.couplet-char {
+  font-family: 'LXGW WenKai TC', 'Ma Shan Zheng', 'KaiTi', 'DFKai-SB', 'BiauKai', serif;
+  font-weight: 700;
+  font-size: var(--char-size);
+  line-height: 1.05;
+}
+
+.couplet-reading {
+  font-family: 'Noto Serif', Georgia, serif;
+  font-weight: 700;
+  font-size: max(calc(var(--char-size) * 0.34), var(--reading-min, 0rem));
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  color: #fbe7b0;
+  white-space: nowrap;
+}
+
+/* wooden rods at the top and bottom of each scroll */
+.couplet::before,
+.couplet::after {
+  content: '';
+  position: absolute;
+  left: -0.5rem;
+  right: -0.5rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #8a5a2b, #4a2c12);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+.couplet::before {
+  top: -0.5rem;
+}
+
+.couplet::after {
+  bottom: -0.5rem;
+}
+
+.couplet--left {
+  left: 1rem;
+}
+
+.couplet--right {
+  right: 1rem;
+}
+
+/* leave room for the scrolls on wide screens */
+@media (min-width: 1100px) {
+  .app {
+    --app-pad-x: calc(min(3.4rem, 5.5vh) * 1.9 + 2.6rem);
+  }
+}
+
+/* tablets & phones: the scrolls hang beside the title plaque (like câu đối beside a hoành phi) */
+@media (max-width: 1099px) {
+  .app {
+    position: relative;
+  }
+
+  .couplet {
+    --char-size: 2.15rem;
+    --reading-min: 0.8rem;
+    position: absolute;
+    top: 1.1rem;
+    transform: none;
+  }
+
+  .couplet--left {
+    left: 1rem;
+  }
+
+  .couplet--right {
+    right: 1rem;
+  }
+
+  .app-header {
+    width: min(640px, calc(100% - 10.5rem));
+    margin-top: 0.5rem;
+  }
+}
+
 /* ---------- Mobile ---------- */
 @media (max-width: 640px) {
   .app {
-    padding: 1rem 0.6rem 1.5rem;
+    --app-pad-x: 0.6rem;
+    padding: 1rem var(--app-pad-x) 1.5rem;
+  }
+
+  .header-band.is-compact .app-header {
+    gap: 0.6rem;
+    padding: 0.25rem 1.2rem 0.3rem;
+  }
+
+  .header-band.is-compact .app-header h1 {
+    font-size: 1.15rem;
+  }
+
+  .header-band.is-compact .app-header h2 {
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+  }
+
+  .couplet {
+    --char-size: 1.45rem;
+    --reading-min: 0.64rem;
+    width: 2.95rem;
+    top: 0.8rem;
+  }
+
+  .couplet::before,
+  .couplet::after {
+    left: -0.3rem;
+    right: -0.3rem;
+    height: 0.4rem;
+  }
+
+  .couplet::before {
+    top: -0.32rem;
+  }
+
+  .couplet::after {
+    bottom: -0.32rem;
+  }
+
+  .couplet--left {
+    left: 0.4rem;
+  }
+
+  .couplet--right {
+    right: 0.4rem;
+  }
+
+  .app-header {
+    width: calc(100% - 7.3rem);
   }
 
   .app-header {
@@ -1823,6 +2205,12 @@ onMounted(async () => {
   .lunar-event-last-text {
     display: none;
   }
+}
+
+.member-form input.is-locked {
+  background: #f2efe8;
+  color: #6b5f4f;
+  cursor: not-allowed;
 }
 
 .field-hint {

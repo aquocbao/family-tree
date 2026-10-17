@@ -10,6 +10,10 @@ export interface FamilyMember {
   deathDate?: string
   /** Lunar death date as entered by admin (free text). Empty → computed from deathDate. */
   deathDateLunar?: string
+  /** Nơi tổ chức đám giỗ: ID of the living member whose home hosts it */
+  memorialHostId?: string
+  /** (older data) Nơi tổ chức đám giỗ as free text; shown when no host is chosen */
+  memorialPlace?: string
   gender: FamilyGender
   fatherId?: string
   motherId?: string
@@ -36,6 +40,8 @@ export interface FamilyTreeSettings {
   showDeathDate: boolean
   showSpouse: boolean
   showViewDetail: boolean
+  /** Show "Nơi giỗ" on cards and in the notification bar (default true) */
+  showMemorialPlace?: boolean
   /** Notification bar: show ngày giỗ / Lễ Tết within this many months (0 = hide the bar). Default 3. */
   notificationMonths?: number
   /** Lễ Tết shown in the notification bar (editable in admin settings). Missing = default list. */

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, inject, type Ref } from 'vue'
 import type { FamilyMember } from '../types/family'
 import { solarDateTextToLunarText } from '../utils/lunar'
+import { memorialPlaceLabel } from '../utils/memorial'
 
 const props = withDefaults(
   defineProps<{
@@ -66,6 +67,15 @@ const lunarDeathDate = computed(
   () => props.member.deathDateLunar?.trim() || solarDateTextToLunarText(props.member.deathDate),
 )
 
+const memberById = inject<(id?: string) => FamilyMember | undefined>('familyMemberById', () => undefined)
+const showMemorialPlaceSetting = inject<Ref<boolean> | undefined>('showMemorialPlace', undefined)
+const memorialPlace = computed(() =>
+  showMemorialPlaceSetting?.value === false ? '' : memorialPlaceLabel(props.member, memberById),
+)
+
+// Has a (lunar) death date → shown on a grey card
+const isDeceased = computed(() => Boolean(lunarDeathDate.value))
+
 const formatDate = (value?: string): string => {
   if (!value) {
     return '—'
@@ -87,7 +97,7 @@ const formatDate = (value?: string): string => {
 <template>
   <article
     class="person-card"
-    :class="[`person-card--${genderClass}`, { 'person-card--highlighted': highlighted }]"
+    :class="[`person-card--${genderClass}`, { 'person-card--highlighted': highlighted, 'person-card--deceased': isDeceased }]"
     :data-member-id="member.id"
   >
     <template v-if="isContentHidden">
@@ -122,6 +132,9 @@ const formatDate = (value?: string): string => {
       <p v-if="showBirthDate"><strong>Ngày sinh:</strong> {{ formatDate(member.birthDate) }}</p>
       <p v-if="showDeathDate && member.deathDate"><strong>Ngày mất:</strong> {{ formatDate(member.deathDate) }}</p>
       <p v-if="showDeathDate && lunarDeathDate"><strong>Ngày mất (âm lịch):</strong> {{ lunarDeathDate }}</p>
+      <p v-if="memorialPlace" class="memorial-place">
+        <strong>Nơi giỗ:</strong> {{ memorialPlace }}
+      </p>
       <p v-if="canShowSpouse"><strong>Vợ/Chồng:</strong> {{ spouseName }}</p>
     </template>
 
@@ -183,19 +196,26 @@ const formatDate = (value?: string): string => {
   box-shadow: 0 2px 8px rgba(24, 39, 75, 0.06);
 }
 
+/* living members: light, bright cards (deceased ones are grey, below) */
 .person-card--male {
-  background: #f0f7ff;
-  border-color: #9fc3ef;
+  background: #f7fbff;
+  border-color: #bcd6f4;
 }
 
 .person-card--female {
-  background: #fff1f7;
-  border-color: #efb3cf;
+  background: #fff8fb;
+  border-color: #f3cadc;
 }
 
 .person-card--other {
-  background: #f6f6fb;
-  border-color: #d7dbe6;
+  background: #fbfbfd;
+  border-color: #dfe2ea;
+}
+
+/* deceased (ngày mất âm lịch known): grey card */
+.person-card.person-card--deceased {
+  background: #d8d4cc;
+  border-color: #a39c8f;
 }
 
 .person-card h3 {
@@ -214,6 +234,14 @@ const formatDate = (value?: string): string => {
 .person-card p {
   margin: 0.25rem 0;
   white-space: nowrap;
+}
+
+/* a long address wraps inside the card instead of making it very wide */
+.person-card p.memorial-place {
+  white-space: normal;
+  width: 0;
+  min-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .actions {

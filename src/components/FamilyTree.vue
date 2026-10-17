@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import AnniversaryBar from './AnniversaryBar.vue'
 import FamilyTreeNode from './FamilyTreeNode.vue'
 import type { FamilyMember, FamilyUnit } from '../types/family'
@@ -16,9 +16,11 @@ const props = withDefaults(
     /** Notification bar window in months (0 = hidden). */
     notificationMonths?: number
     lunarEvents?: LunarEvent[]
+    showMemorialPlace?: boolean
   }>(),
   {
     notificationMonths: 3,
+    showMemorialPlace: true,
     canManage: false,
     showBirthDate: true,
     showDeathDate: true,
@@ -167,69 +169,250 @@ const units = computed(() => {
   }
 })
 
-const childUnitsByUnitKey = computed(() => {
-  const map = new Map<string, FamilyUnit[]>()
+// Where each family unit hangs in the tree.
+// A couple can have parents on both sides (the husband's and the wife's). Following the paternal line of a
+// gia phả, the couple is drawn under the husband's parents (primary); the other spouse's parents are shown
+// above that spouse's card as "bên ngoại/bên nội" instead of starting a separate tree.
+const unitParentLinks = computed(() => {
+  const primary = new Map<string, { parentKey: string; owner: FamilyMember }>()
+  const inLawByMemberId = new Map<string, FamilyUnit>()
 
   for (const unit of units.value.unitMap.values()) {
-    const parentIds = new Set(unit.members.map((member) => member.id))
-    const children = props.members
-      .filter((member) => {
-        return (
-          (member.fatherId ? parentIds.has(member.fatherId) : false) ||
-          (member.motherId ? parentIds.has(member.motherId) : false)
-        )
-      })
-      .sort(compareMembersLeftToRight)
-
-    const addedChildUnitKeys = new Set<string>()
-    const childUnits: FamilyUnit[] = []
-
-    for (const child of children) {
-      const childUnitKey = units.value.memberToUnitKey.get(child.id)
-      if (!childUnitKey || addedChildUnitKeys.has(childUnitKey)) {
-        continue
+    const candidates: { owner: FamilyMember; parentKey: string }[] = []
+    for (const member of unit.members) {
+      const seen = new Set<string>()
+      for (const parentId of [member.fatherId, member.motherId]) {
+        const parentKey = parentId ? units.value.memberToUnitKey.get(parentId) : undefined
+        if (parentKey && parentKey !== unit.key && !seen.has(parentKey)) {
+          seen.add(parentKey)
+          candidates.push({ owner: member, parentKey })
+        }
       }
-
-      const childUnit = units.value.unitMap.get(childUnitKey)
-      if (!childUnit) {
-        continue
-      }
-
-      childUnits.push(childUnit)
-      addedChildUnitKeys.add(childUnitKey)
     }
 
-    map.set(unit.key, childUnits)
+    if (candidates.length === 0) {
+      continue
+    }
+
+    const chosen = candidates.find((candidate) => candidate.owner.gender === 'male') ?? candidates[0]
+    primary.set(unit.key, chosen)
+
+    for (const candidate of candidates) {
+      if (candidate.owner.id === chosen.owner.id || inLawByMemberId.has(candidate.owner.id)) {
+        continue
+      }
+      const parentUnit = units.value.unitMap.get(candidate.parentKey)
+      if (parentUnit) {
+        inLawByMemberId.set(candidate.owner.id, parentUnit)
+      }
+    }
+  }
+
+  return { primary, inLawByMemberId }
+})
+
+const childUnitsByUnitKey = computed(() => {
+  const map = new Map<string, FamilyUnit[]>()
+  const owners = new Map<string, FamilyMember>()
+
+  for (const unit of units.value.unitMap.values()) {
+    map.set(unit.key, [])
+  }
+
+  for (const [childKey, link] of unitParentLinks.value.primary) {
+    const childUnit = units.value.unitMap.get(childKey)
+    if (childUnit) {
+      map.get(link.parentKey)?.push(childUnit)
+      owners.set(childKey, link.owner)
+    }
+  }
+
+  // Siblings left → right by the blood member's position / birth date
+  for (const list of map.values()) {
+    list.sort((left, right) => {
+      const a = owners.get(left.key)
+      const b = owners.get(right.key)
+      return a && b ? compareMembersLeftToRight(a, b) : compareUnitsLeftToRight(left, right)
+    })
   }
 
   return map
 })
 
 const rootUnits = computed(() => {
-  const allUnitKeys = new Set(units.value.unitMap.keys())
-  const childUnitKeys = new Set<string>()
-
-  for (const childUnits of childUnitsByUnitKey.value.values()) {
-    for (const childUnit of childUnits) {
-      childUnitKeys.add(childUnit.key)
-    }
-  }
-
+  const inLawUnitKeys = new Set([...unitParentLinks.value.inLawByMemberId.values()].map((unit) => unit.key))
   const rootUnitList: FamilyUnit[] = []
 
-  for (const unitKey of allUnitKeys) {
-    if (childUnitKeys.has(unitKey)) {
+  for (const unit of units.value.unitMap.values()) {
+    if (unitParentLinks.value.primary.has(unit.key)) {
+      continue // drawn under its parents
+    }
+
+    // Parents of a married-in spouse with no other children in the tree: shown above that spouse instead
+    if (inLawUnitKeys.has(unit.key) && (childUnitsByUnitKey.value.get(unit.key)?.length ?? 0) === 0) {
       continue
     }
 
-    const unit = units.value.unitMap.get(unitKey)
-    if (unit) {
-      rootUnitList.push(unit)
-    }
+    rootUnitList.push(unit)
   }
 
   return rootUnitList.sort(compareUnitsLeftToRight)
 })
+
+const getInLawParents = (memberId: string): FamilyUnit | undefined => unitParentLinks.value.inLawByMemberId.get(memberId)
+
+// ---- Connector lines for in-law parents (computed from the rendered layout) ----
+const canvasRef = ref<HTMLElement | null>(null)
+const inLawLinks = ref<{ key: string; d: string }[]>([])
+let linkFrame = 0
+let canvasResizeObserver: ResizeObserver | undefined
+let canvasMutationObserver: MutationObserver | undefined
+
+// Position of an element inside the tree canvas, in the canvas's own (unzoomed) CSS pixels.
+// Uses offsetTop/offsetLeft, so it is the same in every browser whatever the zoom level is.
+const boxInCanvas = (element: HTMLElement, canvas: HTMLElement) => {
+  let left = 0
+  let top = 0
+  let current: HTMLElement | null = element
+  while (current && current !== canvas) {
+    left += current.offsetLeft
+    top += current.offsetTop
+    const parent = current.offsetParent as HTMLElement | null
+    if (parent && parent !== canvas && !canvas.contains(parent)) {
+      return null
+    }
+    current = parent
+  }
+  if (current !== canvas) {
+    return null
+  }
+  const width = element.offsetWidth
+  const height = element.offsetHeight
+  return { left, top, width, height, right: left + width, bottom: top + height }
+}
+
+const updateInLawLinks = (): void => {
+  const canvas = canvasRef.value
+  if (!canvas) {
+    inLawLinks.value = []
+    return
+  }
+
+  const links: { key: string; d: string }[] = []
+
+  for (const guest of canvas.querySelectorAll<HTMLElement>('[data-inlaw-for]')) {
+    const childId = guest.dataset.inlawFor ?? ''
+    const spouseId = guest.dataset.inlawSpouse ?? ''
+    const parents = guest.querySelector<HTMLElement>('.inlaw-cards')
+    const childWrap = guest.querySelector<HTMLElement>('.inlaw-child')
+    const guestBox = boxInCanvas(guest, canvas)
+    if (!parents || !childWrap || !guestBox) {
+      continue
+    }
+
+    const partner = spouseId
+      ? canvas.querySelector<HTMLElement>(`.person-card[data-member-id="${CSS.escape(spouseId)}"]`)
+      : null
+    const partnerBox = partner ? boxInCanvas(partner, canvas) : null
+
+    // The parents' Thu gọn / Mở rộng button sits in the middle between the two families.
+    const familyRow = guest.closest<HTMLElement>('.unit-row.has-guests')
+    const familyMain = familyRow?.querySelector<HTMLElement>(':scope > .unit-main')
+    const familyToggle = familyRow?.parentElement?.querySelector<HTMLElement>(':scope > .toggle:not([data-couple-toggle])')
+    const mainBox = familyMain ? boxInCanvas(familyMain, canvas) : null
+    if (familyToggle && mainBox) {
+      const groupCenter = (Math.min(mainBox.left, guestBox.left) + Math.max(mainBox.right, guestBox.right)) / 2
+      const toggleShift = `${Math.round(groupCenter - (mainBox.left + mainBox.width / 2))}px`
+      familyToggle.style.position = 'relative'
+      if (familyToggle.style.left !== toggleShift) {
+        familyToggle.style.left = toggleShift
+      }
+    }
+
+    // …and the parents' line runs straight from their cards down to their child (the button moved away).
+    // Drawn as one line (the list's own short CSS stubs are hidden) so there is no join or step.
+    const familyChildren = familyRow?.closest('.node')?.querySelector<HTMLElement>(':scope > .children')
+    const onlyChildCard = familyChildren?.querySelector<HTMLElement>(
+      ':scope > .node:only-child > .unit-content .person-card',
+    )
+    const onlyChildBox = onlyChildCard ? boxInCanvas(onlyChildCard, canvas) : null
+    if (familyChildren && mainBox && onlyChildBox) {
+      familyChildren.setAttribute('data-svg-stem', '')
+      const x = onlyChildBox.left + onlyChildBox.width / 2
+      links.push({ key: `${childId}-parents-down`, d: `M ${x} ${mainBox.bottom} L ${x} ${onlyChildBox.top}` })
+    } else if (familyChildren) {
+      familyChildren.removeAttribute('data-svg-stem')
+    }
+
+    // Partner's branch collapsed (Thu gọn) → hide the married-in child too, with their line.
+    if (!partnerBox) {
+      childWrap.classList.remove('is-placed')
+      continue
+    }
+
+    // Place the married-in child under their parents, exactly level with their partner (if visible).
+    const top = partnerBox ? partnerBox.top - guestBox.top : guestBox.height + 40
+    const nextTop = `${Math.round(top)}px`
+    const nextLeft = `${Math.round((guest.offsetWidth - childWrap.offsetWidth) / 2)}px` // centred under the parents
+    if (childWrap.style.top !== nextTop) {
+      childWrap.style.top = nextTop
+    }
+    if (childWrap.style.left !== nextLeft) {
+      childWrap.style.left = nextLeft
+    }
+    childWrap.classList.add('is-placed')
+
+    const childCard = childWrap.querySelector<HTMLElement>('.person-card') ?? childWrap
+    const parentsBox = boxInCanvas(parents, canvas)
+    const childBox = boxInCanvas(childCard, canvas)
+    if (!parentsBox || !childBox) {
+      continue
+    }
+
+    // parents → child (vertical)
+    const px = parentsBox.left + parentsBox.width / 2
+    links.push({ key: `${childId}-down`, d: `M ${px} ${parentsBox.bottom} L ${px} ${childBox.top}` })
+
+    // partner ↔ child (horizontal marriage line)
+    if (partnerBox) {
+      const midY = partnerBox.top + Math.min(partnerBox.height, childBox.height) / 2
+      const fromLeft = partnerBox.right <= childBox.left
+      const x1 = fromLeft ? partnerBox.right : partnerBox.left
+      const x2 = fromLeft ? childBox.left : childBox.right
+      links.push({ key: `${childId}-spouse`, d: `M ${x1} ${midY} L ${x2} ${midY}` })
+
+      // The couple's children (and the Mở rộng/Thu gọn button) hang from the middle of the marriage line.
+      const middleX = (x1 + x2) / 2
+      const shift = `${Math.round(middleX - (partnerBox.left + partnerBox.width / 2))}px`
+      const toggle = canvas.querySelector<HTMLElement>(`[data-couple-toggle="${CSS.escape(spouseId)}"]`)
+      const children = canvas.querySelector<HTMLElement>(`[data-couple-children="${CSS.escape(spouseId)}"]`)
+      for (const element of [toggle, children]) {
+        if (element && element.style.left !== shift) {
+          element.style.left = shift
+        }
+      }
+      const toggleBox = toggle ? boxInCanvas(toggle, canvas) : null
+      const childrenBox = children ? boxInCanvas(children, canvas) : null
+      const stemEnd = toggleBox ? toggleBox.top : childrenBox ? childrenBox.top : null
+      if (stemEnd !== null) {
+        links.push({ key: `${childId}-stem`, d: `M ${middleX} ${midY} L ${middleX} ${stemEnd}` })
+      }
+    }
+  }
+
+  // Only update when something moved, so redrawing the SVG doesn't re-trigger the observer forever.
+  if (JSON.stringify(links) !== JSON.stringify(inLawLinks.value)) {
+    inLawLinks.value = links
+  }
+}
+
+const scheduleInLawLinks = (): void => {
+  cancelAnimationFrame(linkFrame)
+  linkFrame = requestAnimationFrame(() => {
+    balanceTreeRoot()
+    updateInLawLinks()
+  })
+}
 
 const getMemberName = (id?: string): string | undefined => {
   if (!id) {
@@ -246,6 +429,13 @@ const getMemberById = (id?: string): FamilyMember | undefined => {
 
   return memberMap.value.get(id)
 }
+
+// Cards look up other members (e.g. who hosts the đám giỗ)
+provide('familyMemberById', getMemberById)
+provide(
+  'showMemorialPlace',
+  computed(() => props.showMemorialPlace),
+)
 
 const getChildUnits = (unitKey: string): FamilyUnit[] => {
   return childUnitsByUnitKey.value.get(unitKey) ?? []
@@ -266,23 +456,8 @@ const selectedParentUnit = computed((): FamilyUnit | undefined => {
     return undefined
   }
 
-  for (const member of unit.members) {
-    for (const parentId of [member.fatherId, member.motherId]) {
-      if (!parentId) {
-        continue
-      }
-
-      const parentUnitKey = units.value.memberToUnitKey.get(parentId)
-      if (parentUnitKey && parentUnitKey !== unit.key) {
-        const parentUnit = units.value.unitMap.get(parentUnitKey)
-        if (parentUnit) {
-          return parentUnit
-        }
-      }
-    }
-  }
-
-  return undefined
+  const link = unitParentLinks.value.primary.get(unit.key)
+  return link ? units.value.unitMap.get(link.parentKey) : undefined
 })
 
 const selectedRootUnits = computed(() => {
@@ -457,6 +632,7 @@ const toggleExpandAll = (): void => {
 
   expandRequest.value = { keys: new Set(units.value.unitMap.keys()), nonce: Date.now() }
   isAllExpanded.value = true
+  void centerOnRoot()
 }
 
 const clearFocusedTree = (): void => {
@@ -516,10 +692,56 @@ const centerElementInTree = (element: Element | null | undefined, behavior: Scro
   wrapper.scrollTo({ left: Math.max(0, left), behavior })
 }
 
+// When the top couple has a child-in-law's parents drawn beside it, the row keeps an empty column on the
+// left for balance. Slide the tree left (only into space that has no cards) so the whole group is centred.
+const balanceTreeRoot = (): void => {
+  const canvas = canvasRef.value
+  const root = canvas?.querySelector<HTMLElement>('.tree-root')
+  if (!canvas || !root) {
+    return
+  }
+  root.style.left = '0px'
+  const rootNodes = root.querySelectorAll(':scope > .node')
+  const row = rootNodes.length === 1 ? rootNodes[0].querySelector<HTMLElement>(':scope > .unit-content > .unit-row.has-guests') : null
+  const main = row?.querySelector<HTMLElement>(':scope > .unit-main')
+  const guests = row?.querySelector<HTMLElement>(':scope > .inlaw-guests')
+  const mainBox = main ? boxInCanvas(main, canvas) : null
+  const guestsBox = guests ? boxInCanvas(guests, canvas) : null
+  if (!mainBox || !guestsBox) {
+    return
+  }
+  const groupCenter = (Math.min(mainBox.left, guestsBox.left) + Math.max(mainBox.right, guestsBox.right)) / 2
+  const wanted = groupCenter - (mainBox.left + mainBox.width / 2)
+  let leftmostCard = Number.POSITIVE_INFINITY
+  for (const card of root.querySelectorAll<HTMLElement>('.person-card, .toggle')) {
+    const box = boxInCanvas(card, canvas)
+    if (box && box.width > 0) {
+      leftmostCard = Math.min(leftmostCard, box.left)
+    }
+  }
+  const shift = Math.max(0, Math.min(wanted, leftmostCard - 12))
+  root.style.left = `${-Math.round(shift)}px`
+}
+
 const centerOnRoot = async (): Promise<void> => {
   await nextTick()
   requestAnimationFrame(() => {
-    centerElementInTree(treeWrapperRef.value?.querySelector('.tree-root > .node > .unit-content'))
+    balanceTreeRoot()
+    const content = treeWrapperRef.value?.querySelector<HTMLElement>('.tree-root > .node > .unit-content')
+    const row = content?.querySelector<HTMLElement>(':scope > .unit-row.has-guests')
+    const main = row?.querySelector<HTMLElement>(':scope > .unit-main')
+    const guests = row?.querySelector<HTMLElement>(':scope > .inlaw-guests')
+    const wrapper = treeWrapperRef.value
+    if (wrapper && main && guests) {
+      // centre the whole group (both sets of parents)
+      const a = main.getBoundingClientRect()
+      const b = guests.getBoundingClientRect()
+      const w = wrapper.getBoundingClientRect()
+      const middle = (Math.min(a.left, b.left) + Math.max(a.right, b.right)) / 2
+      wrapper.scrollTo({ left: Math.max(0, wrapper.scrollLeft + middle - (w.left + w.width / 2)) })
+      return
+    }
+    centerElementInTree(content)
   })
 }
 
@@ -585,9 +807,23 @@ watch(
 
 watch(zoom, () => {
   void centerOnRoot()
+  scheduleInLawLinks()
 })
 
 onMounted(() => {
+  if (canvasRef.value) {
+    if (typeof ResizeObserver !== 'undefined') {
+      canvasResizeObserver = new ResizeObserver(scheduleInLawLinks)
+      canvasResizeObserver.observe(canvasRef.value)
+    }
+    canvasMutationObserver = new MutationObserver(scheduleInLawLinks)
+    canvasMutationObserver.observe(canvasRef.value, { childList: true, subtree: true })
+    scheduleInLawLinks()
+    // Web fonts arriving late change card heights → re-align.
+    void document.fonts?.ready.then(scheduleInLawLinks)
+    window.addEventListener('resize', scheduleInLawLinks)
+    window.addEventListener('load', scheduleInLawLinks)
+  }
   document.addEventListener('fullscreenchange', syncFullViewState)
   syncFullViewState()
   if (window.matchMedia('(max-width: 640px)').matches) {
@@ -598,6 +834,11 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', syncFullViewState)
+  canvasResizeObserver?.disconnect()
+  window.removeEventListener('resize', scheduleInLawLinks)
+  window.removeEventListener('load', scheduleInLawLinks)
+  canvasMutationObserver?.disconnect()
+  cancelAnimationFrame(linkFrame)
   document.documentElement.classList.remove('tree-pseudo-full-view')
   if (highlightTimer) {
     clearTimeout(highlightTimer)
@@ -618,6 +859,7 @@ onBeforeUnmount(() => {
       :include-hidden="canManage"
       :months="notificationMonths"
       :lunar-events="lunarEvents"
+      :show-memorial-place="showMemorialPlace"
       @select="goToMember"
     />
 
@@ -678,7 +920,11 @@ onBeforeUnmount(() => {
       <button type="button" @click="clearFocusedTree">Xem toàn bộ cây</button>
     </div>
 
-    <div class="tree-canvas" :style="{ zoom }">
+    <div ref="canvasRef" class="tree-canvas" :style="{ zoom }">
+      <!-- Lines for a married-in child: down from their parents, and across to the partner they married -->
+      <svg class="inlaw-links" aria-hidden="true">
+        <path v-for="link in inLawLinks" :key="link.key" :d="link.d" />
+      </svg>
       <ul class="tree-root">
         <FamilyTreeNode
           v-for="unit in selectedRootUnits"
@@ -691,6 +937,7 @@ onBeforeUnmount(() => {
           :highlighted-member-id="highlightedMemberId"
           :member-name-by-id="getMemberName"
           :member-by-id="getMemberById"
+          :in-law-parents-resolver="getInLawParents"
           :can-manage="canManage"
           :show-birth-date="showBirthDate"
           :show-death-date="showDeathDate"
@@ -709,25 +956,77 @@ onBeforeUnmount(() => {
 <style scoped>
 .tree-wrapper {
   position: relative;
-  /* Scroll of rice paper framed in red lacquer with a gold inner line and cloud-motif corners */
-  background:
-    url('/gia-pha-cloud-corner.svg') no-repeat left 6px top 6px / 150px 150px,
-    url('/gia-pha-cloud-corner-tr.svg') no-repeat right 6px top 6px / 150px 150px,
-    url('/gia-pha-cloud-corner-bl.svg') no-repeat left 6px bottom 6px / 150px 150px,
-    url('/gia-pha-cloud-corner-br.svg') no-repeat right 6px bottom 6px / 150px 150px,
-    radial-gradient(ellipse at 50% 45%, rgba(255, 250, 236, 0.55) 0%, transparent 70%),
-    url('/gia-pha-bg.svg') repeat 0 0 / 480px 480px,
-    #f3e6c8;
-  border: 10px solid #7a1d16;
-  border-image: linear-gradient(160deg, #8f2419, #5c120d 50%, #8f2419) 1;
-  padding: 1.75rem 2rem 2rem;
+  /*
+   * An open gia phả book: two aged pages with a shadowed spine in the middle,
+   * stacked page edges on both sides, cloud-motif corners, bound in a red leather
+   * cover with a gold tooled line. Background layers (top → bottom):
+   *   1–4 cloud corners · 5 spine shadow · 6 page curvature · 7–8 page-edge stacks · 9 paper
+   */
+  --book-spine: linear-gradient(
+    90deg,
+    transparent calc(50% - 70px),
+    rgba(110, 70, 30, 0.08) calc(50% - 36px),
+    rgba(90, 50, 20, 0.22) calc(50% - 10px),
+    rgba(60, 30, 10, 0.42) 50%,
+    rgba(90, 50, 20, 0.22) calc(50% + 10px),
+    rgba(110, 70, 30, 0.08) calc(50% + 36px),
+    transparent calc(50% + 70px)
+  );
+  --book-page-curve: linear-gradient(
+    90deg,
+    rgba(90, 55, 20, 0.2),
+    rgba(255, 250, 236, 0.35) 7%,
+    transparent 18%,
+    transparent 82%,
+    rgba(255, 250, 236, 0.35) 93%,
+    rgba(90, 55, 20, 0.2)
+  );
+  --book-page-stack: repeating-linear-gradient(90deg, #cdb98f 0 1px, #f4ead1 1px 3px);
+  background-color: #f3e6c8;
+  background-image:
+    url('/gia-pha-cloud-corner.svg'),
+    url('/gia-pha-cloud-corner-tr.svg'),
+    url('/gia-pha-cloud-corner-bl.svg'),
+    url('/gia-pha-cloud-corner-br.svg'),
+    var(--book-spine),
+    var(--book-page-curve),
+    var(--book-page-stack),
+    var(--book-page-stack),
+    url('/gia-pha-bg.svg');
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat;
+  background-position:
+    left 20px top 8px,
+    right 20px top 8px,
+    left 20px bottom 8px,
+    right 20px bottom 8px,
+    center,
+    center,
+    left top,
+    right top,
+    0 0;
+  background-size:
+    140px 140px,
+    140px 140px,
+    140px 140px,
+    140px 140px,
+    100% 100%,
+    100% 100%,
+    12px 100%,
+    12px 100%,
+    480px 480px;
+  /* leather cover */
+  border: 14px solid #6a1a12;
+  border-image: linear-gradient(160deg, #8a2a1c, #4e110b 45%, #6a1a12 55%, #8a2a1c) 1;
+  border-radius: 6px;
+  padding: 1.75rem 2.4rem 2rem;
   overflow-x: auto;
   box-shadow:
-    inset 0 0 0 2px #c9a24a,
-    inset 0 0 0 5px #f3e6c8,
-    inset 0 0 0 6px rgba(201, 162, 74, 0.7),
-    inset 0 0 60px rgba(120, 70, 20, 0.18),
-    0 14px 30px rgba(60, 25, 8, 0.28);
+    inset 0 0 0 1px rgba(60, 25, 8, 0.45),
+    inset 0 0 50px rgba(120, 70, 20, 0.2),
+    0 0 0 2px #c9a24a,
+    0 0 0 4px #4e110b,
+    0 18px 36px rgba(50, 20, 6, 0.38),
+    0 4px 0 6px rgba(60, 25, 8, 0.25);
 }
 
 
@@ -837,7 +1136,9 @@ onBeforeUnmount(() => {
 }
 
 .tree-root {
-  margin: 0;
+  /* centred in the book when the tree is narrower than the page */
+  position: relative;
+  margin: 0 auto;
   width: max-content;
   padding: 0;
   list-style: none;
@@ -846,7 +1147,25 @@ onBeforeUnmount(() => {
   gap: 1rem;
 }
 
+.inlaw-links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.inlaw-links path {
+  fill: none;
+  stroke: #9b3a24;
+  stroke-width: 2;
+}
+
 .tree-canvas {
+  position: relative;
+  padding-top: 1rem; /* room for small captions above the first row (e.g. "Bên ngoại") */
   width: max-content;
   min-width: 100%;
   margin: 0 auto;
@@ -993,16 +1312,30 @@ onBeforeUnmount(() => {
 /* ---------- Mobile ---------- */
 @media (max-width: 640px) {
   .tree-wrapper {
-    border-width: 6px;
-    padding: 0.9rem 0.6rem 1.2rem;
+    /* phones show a single page: no spine in the middle */
+    --book-spine: linear-gradient(transparent, transparent);
+    border-width: 8px;
+    padding: 0.9rem 0.9rem 1.2rem;
+    background-position:
+      left 12px top 6px,
+      right 12px top 6px,
+      left 12px bottom 6px,
+      right 12px bottom 6px,
+      center,
+      center,
+      left top,
+      right top,
+      0 0;
     background-size:
-      80px 80px,
-      80px 80px,
-      80px 80px,
-      80px 80px,
-      auto,
-      480px 480px,
-      auto;
+      70px 70px,
+      70px 70px,
+      70px 70px,
+      70px 70px,
+      100% 100%,
+      100% 100%,
+      7px 100%,
+      7px 100%,
+      480px 480px;
   }
 
   .view-controls {

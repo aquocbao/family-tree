@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { FamilyMember } from '../types/family'
 import type { LunarEvent } from '../utils/lunar-events'
+import { memorialPlaceLabel } from '../utils/memorial'
 import { formatSolarDate, getUpcomingAnniversaries, getUpcomingLunarEvents, weekdayName } from '../utils/anniversary'
 
 const props = withDefaults(
@@ -18,8 +19,9 @@ const props = withDefaults(
     months?: number
     /** Lễ Tết list (admin-editable). Missing = default list. */
     lunarEvents?: LunarEvent[]
+    showMemorialPlace?: boolean
   }>(),
-  { includeHidden: false, soonDays: 14, limit: 5, eventLimit: 5, months: 4 },
+  { includeHidden: false, soonDays: 14, limit: 5, eventLimit: 5, months: 4, showMemorialPlace: true },
 )
 
 const emit = defineEmits<{
@@ -110,6 +112,16 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
 })
 
+const memberMap = computed(() => new Map(props.members.map((member) => [member.id, member])))
+const placeOf = (member: FamilyMember): string =>
+  props.showMemorialPlace === false
+    ? ''
+    : memorialPlaceLabel(member, (id) => (id ? memberMap.value.get(id) : undefined)).replace(/^Nhà/, 'nhà')
+
+// "Ông" for men, "Bà" for women (none for "Khác")
+const honorific = (member: FamilyMember): string =>
+  member.gender === 'male' ? 'Ông ' : member.gender === 'female' ? 'Bà ' : ''
+
 const whenLabel = (daysLeft: number): string => {
   if (daysLeft === 0) return 'Hôm nay'
   if (daysLeft === 1) return 'Ngày mai'
@@ -153,11 +165,11 @@ const whenLabel = (daysLeft: number): string => {
               @click="emit('select', item.data.member.id)"
             >
               <span class="item-tag">Giỗ</span>
-              <strong>{{ item.data.member.name }}</strong>
+              <strong>{{ honorific(item.data.member) }}{{ item.data.member.name }}</strong>
               <span class="anniversary-when" :class="{ 'is-today': item.daysLeft === 0 }">{{ whenLabel(item.daysLeft) }}</span>
               <span class="anniversary-date">
                 {{ item.data.lunarDay }}/{{ item.data.lunarMonth }} âm lịch · {{ weekdayName(item.data.date) }},
-                {{ formatSolarDate(item.data.date) }}<template v-if="item.data.count"> · giỗ lần thứ {{ item.data.count }}</template>
+                {{ formatSolarDate(item.data.date) }}<template v-if="item.data.count"> · giỗ lần thứ {{ item.data.count }}</template><template v-if="placeOf(item.data.member)"> · tại {{ placeOf(item.data.member) }}</template>
               </span>
             </button>
             <span v-else class="anniversary-item is-event">
