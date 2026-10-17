@@ -1,9 +1,9 @@
 import type { FamilyMember } from '../types/family'
 import { solarDateTextToLunarText } from './lunar'
 
-/** Deceased = has a lunar death date (typed in, or computed from the solar death date). */
+/** Deceased = marked "đã mất" (date unknown), or has a death date (lunar typed in, or from the solar date). */
 export const isDeceased = (member: FamilyMember): boolean =>
-  Boolean(member.deathDateLunar?.trim() || solarDateTextToLunarText(member.deathDate))
+  Boolean(member.deceased || member.deathDateLunar?.trim() || solarDateTextToLunarText(member.deathDate))
 
 export const honorific = (member: FamilyMember): string =>
   member.gender === 'male' ? 'ông ' : member.gender === 'female' ? 'bà ' : ''

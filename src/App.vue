@@ -4,9 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { ADMIN_PATH, SUPER_ADMIN_PATH } from './admin-paths'
 import FamilyTree from './components/FamilyTree.vue'
 import SearchableMemberSelect from './components/SearchableMemberSelect.vue'
+import GateDoor from './components/GateDoor.vue'
 import { fetchFamilyDatabase, saveFamilyDatabase } from './data/family-db-api'
 import { solarDateTextToLunarText } from './utils/lunar'
 import { isDeceased as isDeceasedMember } from './utils/memorial'
+import { spouseIdsOf } from './utils/spouses'
 import {
   DEFAULT_LUNAR_EVENTS,
   MAX_LUNAR_EVENTS,
@@ -29,9 +31,10 @@ type MemberForm = {
   gender: FamilyGender
   fatherId: string
   motherId: string
-  spouseId: string
-  formerSpouseId: string
+  /** Vợ/Chồng in order (Vợ 1, Vợ 2…); '' = a row not filled in yet */
+  spouseIds: string[]
   spouseOnRight: boolean
+  deceased: boolean
 }
 
 type AppMode = 'view' | 'admin' | 'super-admin'
@@ -64,9 +67,9 @@ const emptyForm = (): MemberForm => ({
   gender: 'other',
   fatherId: '',
   motherId: '',
-  spouseId: '',
-  formerSpouseId: '',
+  spouseIds: [''],
   spouseOnRight: false,
+  deceased: false,
 })
 
 const formatDateForAdmin = (value?: string): string => {
@@ -411,15 +414,39 @@ const startEditMember = (id: string): void => {
     gender: member.gender,
     fatherId: member.fatherId ?? '',
     motherId: member.motherId ?? '',
-    spouseId: member.spouseId ?? '',
-    formerSpouseId: member.formerSpouseId ?? '',
+    spouseIds: spouseIdsOf(member).length ? spouseIdsOf(member) : [''],
     spouseOnRight: member.spouseOnRight ?? false,
+    deceased: member.deceased ?? false,
   }
 
   isEditing.value = true
   editingId.value = member.id
   formError.value = ''
   void focusEditorPanel()
+}
+
+/** Writes a member's spouse list in the current format (spouseIds + spouseId = first; no divorce field). */
+const setSpouseIds = (member: FamilyMember, ids: string[]): void => {
+  const list = [...new Set(ids.filter((id) => id && id !== member.id))]
+  member.spouseIds = list.length ? list : undefined
+  member.spouseId = list[0]
+  member.formerSpouseId = undefined
+}
+
+const addSpouseRow = (): void => {
+  form.value.spouseIds.push('')
+}
+
+const removeSpouseRow = (index: number): void => {
+  form.value.spouseIds.splice(index, 1)
+  if (form.value.spouseIds.length === 0) {
+    form.value.spouseIds.push('')
+  }
+}
+
+const spouseRowLabel = (index: number): string => {
+  const word = form.value.gender === 'male' ? 'Vợ' : form.value.gender === 'female' ? 'Chồng' : 'Vợ/Chồng'
+  return form.value.spouseIds.length > 1 ? `${word} ${index + 1}` : word
 }
 
 const normalizeMember = (member: FamilyMember): FamilyMember => {
@@ -433,9 +460,11 @@ const normalizeMember = (member: FamilyMember): FamilyMember => {
     memorialHostId: member.memorialHostId ?? undefined,
     fatherId: member.fatherId ?? undefined,
     motherId: member.motherId ?? undefined,
+    spouseIds: member.spouseIds?.length ? [...member.spouseIds] : undefined,
     spouseId: member.spouseId ?? undefined,
     formerSpouseId: member.formerSpouseId ?? undefined,
     spouseOnRight: member.spouseOnRight ?? undefined,
+    deceased: member.deceased ?? undefined,
     isHidden: member.isHidden ?? undefined,
   }
 }
@@ -584,21 +613,15 @@ const validateForm = (): boolean => {
     return false
   }
 
-  if (
-    form.value.spouseId &&
-    form.value.spouseId === form.value.id
-  ) {
+  const selfId = isEditing.value && editingId.value ? editingId.value : form.value.id.trim()
+  if (form.value.spouseIds.some((id) => id && (id === selfId || id === form.value.id.trim()))) {
     formError.value = 'Một thành viên không thể tự chọn chính mình làm vợ/chồng.'
     return false
   }
 
-  if (form.value.formerSpouseId && form.value.formerSpouseId === form.value.id) {
-    formError.value = 'Không thể chọn chính mình làm vợ/chồng trước.'
-    return false
-  }
-
-  if (form.value.formerSpouseId && form.value.formerSpouseId === form.value.spouseId) {
-    formError.value = 'Vợ/chồng trước không thể trùng với vợ/chồng hiện tại.'
+  const chosenSpouses = form.value.spouseIds.filter(Boolean)
+  if (new Set(chosenSpouses).size !== chosenSpouses.length) {
+    formError.value = 'Một người được chọn làm vợ/chồng hai lần.'
     return false
   }
 
@@ -677,6 +700,7 @@ const saveMember = async (): Promise<void> => {
 
   const positionText = normalizePositionInput(form.value.position)
 
+  const chosenSpouseIds = [...new Set(form.value.spouseIds.filter(Boolean))]
   const payload: FamilyMember = {
     id: isEditing.value && editingId.value ? editingId.value : form.value.id.trim(),
     name: form.value.name.trim(),
@@ -692,9 +716,10 @@ const saveMember = async (): Promise<void> => {
     gender: form.value.gender,
     fatherId: form.value.fatherId || undefined,
     motherId: form.value.motherId || undefined,
-    spouseId: form.value.spouseId || undefined,
-    formerSpouseId: form.value.formerSpouseId || undefined,
+    spouseIds: chosenSpouseIds.length ? chosenSpouseIds : undefined,
+    spouseId: chosenSpouseIds[0],
     spouseOnRight: form.value.spouseOnRight || undefined,
+    deceased: form.value.deceased || undefined,
   }
 
   const nextMembers = cloneMembers(members.value)
@@ -721,29 +746,29 @@ const saveMember = async (): Promise<void> => {
         if (member.motherId === previousId) {
           member.motherId = payload.id
         }
-        if (member.spouseId === previousId) {
-          member.spouseId = payload.id
+        if (spouseIdsOf(member).includes(previousId)) {
+          setSpouseIds(member, spouseIdsOf(member).map((id) => (id === previousId ? payload.id : id)))
         }
       }
     }
 
-    if (
-      previousMember.spouseId &&
-      previousMember.spouseId !== payload.spouseId
-    ) {
-      const oldSpouse = nextMembers.find((member) => member.id === previousMember.spouseId)
-      if (oldSpouse?.spouseId === previousId) {
-        oldSpouse.spouseId = undefined
+    // Spouses taken off the list no longer list this person either
+    for (const oldId of spouseIdsOf(previousMember)) {
+      if (chosenSpouseIds.includes(oldId)) continue
+      const oldSpouse = nextMembers.find((member) => member.id === oldId)
+      if (oldSpouse) {
+        setSpouseIds(oldSpouse, spouseIdsOf(oldSpouse).filter((id) => id !== previousId && id !== payload.id))
       }
     }
   } else {
     nextMembers.push(payload)
   }
 
-  if (payload.spouseId) {
-    const spouse = nextMembers.find((member) => member.id === payload.spouseId)
-    if (spouse) {
-      spouse.spouseId = payload.id
+  // …and every chosen spouse lists this person back
+  for (const spouseId of chosenSpouseIds) {
+    const spouse = nextMembers.find((member) => member.id === spouseId)
+    if (spouse && !spouseIdsOf(spouse).includes(payload.id)) {
+      setSpouseIds(spouse, [...spouseIdsOf(spouse), payload.id])
     }
   }
 
@@ -799,8 +824,8 @@ const deleteMember = async (id: string): Promise<void> => {
     if (member.motherId === id) {
       member.motherId = undefined
     }
-    if (member.spouseId === id) {
-      member.spouseId = undefined
+    if (spouseIdsOf(member).includes(id)) {
+      setSpouseIds(member, spouseIdsOf(member).filter((spouseId) => spouseId !== id))
     }
   }
 
@@ -1315,8 +1340,16 @@ onMounted(async () => {
           </small>
         </label>
 
+        <label class="checkbox-field deceased-field">
+          <input v-model="form.deceased" type="checkbox" :disabled="isSaving" />
+          <span>
+            Đã mất (không rõ ngày mất)
+            <small class="field-hint">Đánh dấu khi người này đã mất nhưng không biết ngày mất.</small>
+          </span>
+        </label>
+
         <label>
-          Nơi tổ chức đám giỗ (nhà của)
+          Đám giỗ tại
           <SearchableMemberSelect
             v-model="form.memorialHostId"
             list-id="memorial-host-members"
@@ -1355,25 +1388,30 @@ onMounted(async () => {
           />
         </label>
 
-        <label>
-          Vợ/Chồng
-          <SearchableMemberSelect
-            v-model="form.spouseId"
-            list-id="spouse-members"
-            :members="selectableMembers"
-            :disabled="isSaving"
-          />
-        </label>
-
-        <label>
-          Vợ/chồng trước (đã ly hôn)
-          <SearchableMemberSelect
-            v-model="form.formerSpouseId"
-            list-id="former-spouse-members"
-            :members="selectableMembers"
-            :disabled="isSaving"
-          />
-        </label>
+        <fieldset class="spouse-list">
+          <legend>Vợ/Chồng <small>(theo thứ tự: 1, 2, 3…)</small></legend>
+          <div v-for="(_, index) in form.spouseIds" :key="index" class="spouse-list-row">
+            <span class="spouse-list-label">{{ spouseRowLabel(index) }}</span>
+            <SearchableMemberSelect
+              v-model="form.spouseIds[index]"
+              :list-id="`spouse-members-${index}`"
+              :members="selectableMembers"
+              :disabled="isSaving"
+            />
+            <button
+              type="button"
+              class="spouse-list-remove"
+              :disabled="isSaving"
+              :aria-label="`Bỏ ${spouseRowLabel(index)}`"
+              @click="removeSpouseRow(index)"
+            >
+              ✕
+            </button>
+          </div>
+          <button type="button" class="spouse-list-add" :disabled="isSaving" @click="addSpouseRow">
+            + Thêm vợ/chồng
+          </button>
+        </fieldset>
 
         <label class="checkbox-field">
           <input v-model="form.spouseOnRight" type="checkbox" :disabled="isSaving" />
@@ -1501,6 +1539,8 @@ onMounted(async () => {
     <p v-if="isLoading" class="status-message">Đang tải dữ liệu từ file JSON...</p>
     <p v-else-if="loadingError" class="status-message error">{{ loadingError }}</p>
 
+    <!-- View page: the tree sits behind a closed door; click the lock to open it -->
+    <GateDoor :enabled="!isEditableMode">
     <FamilyTree
       :members="members"
       :can-manage="isEditableMode"
@@ -1515,6 +1555,7 @@ onMounted(async () => {
       @delete-member="deleteMember"
       @toggle-member-hidden="toggleMemberHidden"
     />
+    </GateDoor>
   </main>
 </template>
 
@@ -2388,6 +2429,59 @@ onMounted(async () => {
   }
 }
 
+.spouse-list {
+  /* a full row of the form: room for long names and several spouses */
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0.6rem 0.8rem 0.7rem;
+  border: 1px solid #d7dbe6;
+  border-radius: 10px;
+  min-width: 0;
+}
+
+.spouse-list legend {
+  padding: 0 0.3rem;
+  font-weight: 600;
+}
+
+.spouse-list legend small {
+  font-weight: 400;
+  color: #6b5a44;
+}
+
+.spouse-list-row {
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 32rem) 2.2rem;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.spouse-list-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #5f3a1a;
+}
+
+.spouse-list-remove {
+  height: 2.2rem;
+  border: 1px solid #e3b4b4;
+  border-radius: 6px;
+  background: #fff5f5;
+  color: #8f1d1d;
+  cursor: pointer;
+}
+
+.spouse-list-add {
+  border: 1px dashed #a77f48;
+  border-radius: 8px;
+  background: #fffaf0;
+  color: #5c3818;
+  font-weight: 600;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+
 .member-form input.is-locked {
   background: #f2efe8;
   color: #6b5f4f;
@@ -2398,6 +2492,12 @@ onMounted(async () => {
   font-size: 0.78rem;
   font-weight: 400;
   color: #7a6a55;
+}
+
+.deceased-field span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
 }
 
 /* very narrow phones (iPhone SE, small Androids): keep the title on one line */

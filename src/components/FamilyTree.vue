@@ -7,6 +7,7 @@ import type { FamilyMember, FamilyUnit } from '../types/family'
 import type { LunarEvent } from '../utils/lunar-events'
 import { honorific, isDeceased, memorialPlaceLabel } from '../utils/memorial'
 import { solarDateTextToLunarText } from '../utils/lunar'
+import { spouseIdsOf, spouseOrderLabel } from '../utils/spouses'
 
 const props = withDefaults(
   defineProps<{
@@ -107,9 +108,29 @@ const compareMembersLeftToRight = (left: FamilyMember, right: FamilyMember): num
   return left.id.localeCompare(right.id)
 }
 
-const isMutualSpouse = (member: FamilyMember, spouse: FamilyMember): boolean => {
-  return member.spouseId === spouse.id && spouse.spouseId === member.id
-}
+// Spouses of every member, in order. A link written on either person counts (normally both have it).
+const spousesById = computed(() => {
+  const map = new Map<string, string[]>()
+  const add = (from: string, to: string) => {
+    const list = map.get(from) ?? []
+    if (!list.includes(to)) list.push(to)
+    map.set(from, list)
+  }
+  for (const member of props.members) {
+    for (const id of spouseIdsOf(member)) {
+      if (memberMap.value.has(id)) add(member.id, id)
+    }
+  }
+  for (const member of props.members) {
+    for (const id of spouseIdsOf(member)) {
+      if (memberMap.value.has(id)) add(id, member.id)
+    }
+  }
+  return map
+})
+
+const spousesOf = (member: FamilyMember): FamilyMember[] =>
+  (spousesById.value.get(member.id) ?? []).map((id) => memberMap.value.get(id)).filter((m): m is FamilyMember => Boolean(m))
 
 const orderSpousePairLeftToRight = (
   member: FamilyMember,
@@ -161,83 +182,50 @@ const compareUnitsLeftToRight = (left: FamilyUnit, right: FamilyUnit): number =>
   return left.key.localeCompare(right.key)
 }
 
-// ---- Divorce: former spouses ----
-// A former spouse (formerSpouseId, set on either person) is drawn in the row of the person they were married
-// to — the "host" — joined by a dashed "ly hôn" line, with their children hanging from that line.
-// Host = the one whose parents are in the tree (the blood member); if neither/both, the man.
-const formerSpouseLinks = computed(() => {
-  const hasParentsInTree = (member: FamilyMember): boolean =>
-    Boolean((member.fatherId && memberMap.value.has(member.fatherId)) || (member.motherId && memberMap.value.has(member.motherId)))
-  const isInMutualPair = (member: FamilyMember): boolean => {
-    const spouse = member.spouseId ? memberMap.value.get(member.spouseId) : undefined
-    return Boolean(spouse && isMutualSpouse(member, spouse))
-  }
+const hasParentsInTree = (member: FamilyMember): boolean =>
+  Boolean((member.fatherId && memberMap.value.has(member.fatherId)) || (member.motherId && memberMap.value.has(member.motherId)))
 
-  const hostOf = new Map<string, string>() // former spouse id → host id
-  const exesOf = new Map<string, FamilyMember[]>() // host id → former spouses drawn in their row
-  const seenPairs = new Set<string>()
-
-  for (const member of props.members) {
-    const other = member.formerSpouseId ? memberMap.value.get(member.formerSpouseId) : undefined
-    if (!other || other.id === member.id) {
-      continue
-    }
-    const pairKey = [member.id, other.id].sort().join('|')
-    if (seenPairs.has(pairKey)) {
-      continue
-    }
-    seenPairs.add(pairKey)
-
-    // Who keeps the row (host) and who is drawn beside them as the former spouse (ex):
-    // 1. the one born into the family (parents in the tree);
-    // 2. otherwise the one who remarried (so A–ly hôn–B sits next to A's new couple A–C);
-    // 3. otherwise the husband. The order the divorce was entered in (on A or on B) doesn't matter.
-    const memberBlood = hasParentsInTree(member)
-    const otherBlood = hasParentsInTree(other)
-    const memberMarried = isInMutualPair(member)
-    const otherMarried = isInMutualPair(other)
-    let host = member
-    let ex = other
-    if (memberBlood !== otherBlood) {
-      host = memberBlood ? member : other
-      ex = memberBlood ? other : member
-    } else if (memberMarried !== otherMarried) {
-      host = memberMarried ? member : other
-      ex = memberMarried ? other : member
-    } else if (other.gender === 'male' && member.gender !== 'male') {
-      host = other
-      ex = member
-    }
-
-    // The former spouse can only be moved into the host's row when they don't belong elsewhere
-    // (no parents in the tree, not currently married to someone, not already placed with another host).
-    if (hasParentsInTree(ex) || isInMutualPair(ex) || hostOf.has(ex.id) || hostOf.has(host.id)) {
-      continue
-    }
-    hostOf.set(ex.id, host.id)
-    exesOf.set(host.id, [...(exesOf.get(host.id) ?? []), ex])
-  }
-
-  return { hostOf, exesOf }
-})
-
-const getFormerSpouses = (hostId: string): FamilyMember[] => formerSpouseLinks.value.exesOf.get(hostId) ?? []
-
+// ---- Family units ----
+// single: one person · pair: a couple · multi: a person with several spouses, drawn
+//   Vợ 4 · Vợ 1 — CHỒNG — Vợ 2 · Vợ 3  (1st on the left, 2nd on the right, then outwards right/left).
 const units = computed(() => {
   const map = new Map<string, FamilyUnit>()
   const memberToUnitKey = new Map<string, string>()
   const orderedMembers = [...props.members].sort(compareMembersLeftToRight)
-  const { hostOf } = formerSpouseLinks.value
 
-  for (const member of orderedMembers) {
-    if (memberToUnitKey.has(member.id) || hostOf.has(member.id)) {
-      continue // former spouses are placed with their host below
+  // People with several spouses first, so their spouses join them (not someone else)
+  const hostFirst = [...orderedMembers].sort((left, right) => {
+    const diff = (spousesById.value.get(right.id)?.length ?? 0) - (spousesById.value.get(left.id)?.length ?? 0)
+    if (diff !== 0) return diff
+    // same number: the one born into the family, then the man
+    const blood = Number(hasParentsInTree(right)) - Number(hasParentsInTree(left))
+    if (blood !== 0) return blood
+    return Number(right.gender === 'male') - Number(left.gender === 'male')
+  })
+
+  for (const member of hostFirst) {
+    if (memberToUnitKey.has(member.id)) continue
+    const free = spousesOf(member).filter((spouse) => !memberToUnitKey.has(spouse.id))
+
+    if (free.length >= 2) {
+      const left: FamilyMember[] = []
+      const right: FamilyMember[] = []
+      free.forEach((spouse, index) => {
+        // 1 → left, 2 → right, 3 → right, 4 → left, 5 → right, 6 → left …
+        const toLeft = index === 0 || (index >= 2 && index % 2 === 1)
+        if (toLeft) left.unshift(spouse)
+        else right.push(spouse)
+      })
+      const key = `multi:${member.id}`
+      map.set(key, { key, members: [...left, member, ...right], host: member, spouses: free })
+      for (const person of [member, ...free]) memberToUnitKey.set(person.id, key)
+      continue
     }
 
-    const spouse = member.spouseId ? memberMap.value.get(member.spouseId) : undefined
-    if (spouse && !memberToUnitKey.has(spouse.id) && !hostOf.has(spouse.id) && isMutualSpouse(member, spouse)) {
+    if (free.length === 1) {
+      const spouse = free[0]
       const pair = orderSpousePairLeftToRight(member, spouse)
-      const keyParts = [member.id, spouse.id].sort((left, right) => left.localeCompare(right))
+      const keyParts = [member.id, spouse.id].sort((a, b) => a.localeCompare(b))
       const key = `pair:${keyParts[0]}|${keyParts[1]}`
       map.set(key, { key, members: pair })
       memberToUnitKey.set(pair[0].id, key)
@@ -248,14 +236,6 @@ const units = computed(() => {
     const key = `single:${member.id}`
     map.set(key, { key, members: [member] })
     memberToUnitKey.set(member.id, key)
-  }
-
-  // A former spouse belongs to their host's unit (so their children hang from the host's family)
-  for (const [exId, hostId] of hostOf) {
-    const hostKey = memberToUnitKey.get(hostId)
-    if (hostKey) {
-      memberToUnitKey.set(exId, hostKey)
-    }
   }
 
   return {
@@ -289,8 +269,14 @@ const unitParentLinks = computed(() => {
       continue
     }
 
-    const chosen = candidates.find((candidate) => candidate.owner.gender === 'male') ?? candidates[0]
+    const chosen =
+      (unit.host ? candidates.find((candidate) => candidate.owner.id === unit.host?.id) : undefined) ??
+      candidates.find((candidate) => candidate.owner.gender === 'male') ??
+      candidates[0]
     primary.set(unit.key, chosen)
+    if (unit.host) {
+      continue // several spouses: each stays in the row; their own parents are not pulled in as "bên ngoại"
+    }
 
     for (const candidate of candidates) {
       if (candidate.owner.id === chosen.owner.id || inLawByMemberId.has(candidate.owner.id)) {
@@ -362,7 +348,6 @@ const treeStats = computed(() => {
   const shown = new Map<string, FamilyMember>()
   const addMember = (member: FamilyMember) => {
     shown.set(member.id, member)
-    for (const ex of getFormerSpouses(member.id)) shown.set(ex.id, ex)
     for (const parent of getInLawParents(member.id)?.members ?? []) shown.set(parent.id, parent)
   }
 
@@ -392,6 +377,8 @@ const getInLawParents = (memberId: string): FamilyUnit | undefined => unitParent
 // ---- Connector lines for in-law parents (computed from the rendered layout) ----
 const canvasRef = ref<HTMLElement | null>(null)
 const inLawLinks = ref<{ key: string; d: string }[]>([])
+/** "Vợ 1", "Vợ 2"… written on each marriage line of a person with several spouses */
+const marriageLabels = ref<{ key: string; x: number; y: number; text: string }[]>([])
 let linkFrame = 0
 let canvasResizeObserver: ResizeObserver | undefined
 let canvasMutationObserver: MutationObserver | undefined
@@ -423,6 +410,7 @@ const updateInLawLinks = (): void => {
   const canvas = canvasRef.value
   if (!canvas) {
     inLawLinks.value = []
+    marriageLabels.value = []
     return
   }
 
@@ -528,10 +516,108 @@ const updateInLawLinks = (): void => {
     }
   }
 
-  // Divorce: each marriage's children (current couple / each former spouse) hang from the middle of
-  // that marriage's line: down, across to the middle of the children group, down to the group.
+  // Several spouses: a line from the person in the middle to each spouse.
+  // Next to them: straight across at mid-height. Further out: under the cards (so it doesn't cross the inner
+  // spouse), one level lower per step outwards. Remember each marriage line's middle for its children.
   const cardOf = (id?: string) =>
     id ? canvas.querySelector<HTMLElement>(`.person-card[data-member-id="${CSS.escape(id)}"]`) : null
+  const marriageMiddle = new Map<string, { x: number; y: number }>()
+  const labels: { key: string; x: number; y: number; text: string }[] = []
+  for (const row of canvas.querySelectorAll<HTMLElement>('.multi-row[data-host]')) {
+    const hostId = row.dataset.host ?? ''
+    const hostCard = cardOf(hostId)
+    const hostBox = hostCard ? boxInCanvas(hostCard, canvas) : null
+    if (!hostBox) continue
+
+    // The Thu gọn / Mở rộng button sits right under the person in the middle (not under the row's centre,
+    // where a marriage line comes down).
+    const unitRow = row.closest<HTMLElement>('.unit-row')
+    const toggle = unitRow?.parentElement?.querySelector<HTMLElement>(':scope > .toggle')
+    const rowBox = unitRow && !unitRow.classList.contains('has-guests') ? boxInCanvas(unitRow, canvas) : null
+    if (toggle && rowBox) {
+      const shift = `${Math.round(hostBox.left + hostBox.width / 2 - (rowBox.left + rowBox.width / 2))}px`
+      toggle.style.position = 'relative'
+      if (toggle.style.left !== shift) toggle.style.left = shift
+    }
+    for (const slot of row.querySelectorAll<HTMLElement>(':scope > .spouse-slot[data-spouse-id]')) {
+      const spouseId = slot.dataset.spouseId ?? ''
+      const card = slot.querySelector<HTMLElement>('.person-card')
+      const box = card ? boxInCanvas(card, canvas) : null
+      if (!box) continue
+      const level = Number(slot.dataset.spouseLevel ?? 0)
+      const onRight = box.left > hostBox.left
+      const text = slot.dataset.spouseLabel ?? ''
+      if (level === 0) {
+        const y = hostBox.top + Math.min(hostBox.height, box.height) / 2
+        const x1 = onRight ? hostBox.right : hostBox.left
+        const x2 = onRight ? box.left : box.right
+        links.push({ key: `marry-${hostId}-${spouseId}`, d: `M ${x1} ${y} L ${x2} ${y}` })
+        marriageMiddle.set(`${hostId}|${spouseId}`, { x: (x1 + x2) / 2, y })
+        if (text) labels.push({ key: `label-${hostId}-${spouseId}`, x: (x1 + x2) / 2, y: y - 6, text })
+      } else {
+        const bottom = Math.max(hostBox.bottom, box.bottom)
+        const y = bottom + 7 * level
+        const xs = onRight ? hostBox.right - 12 * level : hostBox.left + 12 * level
+        const xe = box.left + box.width / 2
+        links.push({
+          key: `marry-${hostId}-${spouseId}`,
+          d: `M ${xs} ${hostBox.bottom} L ${xs} ${y} L ${xe} ${y} L ${xe} ${box.bottom}`,
+        })
+        marriageMiddle.set(`${hostId}|${spouseId}`, { x: (xs + xe) / 2, y })
+        // on the line, just past the inner spouse's card
+        if (text) labels.push({ key: `label-${hostId}-${spouseId}`, x: xe + (onRight ? -1 : 1) * (box.width / 2 + 20), y: y - 3, text })
+      }
+    }
+  }
+
+  // Several spouses: place each marriage's children group under that marriage (as close as the groups'
+  // widths allow), instead of all groups bunched in the middle. Offsets are relative to the node's centre,
+  // so the result doesn't depend on where the node itself sits (no feedback loop).
+  for (const container of canvas.querySelectorAll<HTMLElement>('.children-groups')) {
+    const node = container.parentElement
+    const nodeBox = node ? boxInCanvas(node, canvas) : null
+    const groups = [...container.querySelectorAll<HTMLElement>(':scope > .children[data-link-a]')]
+    if (!nodeBox || groups.length === 0) continue
+    const nodeCenter = nodeBox.left + nodeBox.width / 2
+    const GAP = 28
+    let previousEnd = -Infinity
+    const placed = groups.map((group) => {
+      const a = group.dataset.linkA ?? ''
+      const b = group.dataset.linkB ?? ''
+      const middle = marriageMiddle.get(`${a}|${b}`)
+      const hostCard = cardOf(a)
+      const hostBox = hostCard ? boxInCanvas(hostCard, canvas) : null
+      const wanted = (middle ? middle.x : hostBox ? hostBox.left + hostBox.width / 2 : nodeCenter) - nodeCenter
+      const width = group.offsetWidth
+      const center = Math.max(wanted, previousEnd + GAP + width / 2)
+      previousEnd = center + width / 2
+      return { group, width, start: center - width / 2 }
+    })
+    const left = -placed[0].start
+    const right = previousEnd
+    const half = Math.max(left, right)
+    const styles: [HTMLElement, string, string][] = [
+      [container, 'gap', '0px'],
+      [container, 'justifyContent', 'flex-start'],
+      [container, 'paddingLeft', `${Math.round(half - left)}px`],
+      [container, 'paddingRight', `${Math.round(half - right)}px`],
+    ]
+    let end = placed[0].start
+    for (const item of placed) {
+      styles.push([item.group, 'marginLeft', `${Math.round(item.start - end)}px`])
+      end = item.start + item.width
+    }
+    for (const [element, prop, value] of styles) {
+      const style = element.style as unknown as Record<string, string>
+      if (style[prop] !== value) style[prop] = value
+    }
+  }
+
+  // Each marriage's children hang from the middle of that marriage's line: down, across to the middle of
+  // the children group, down to the group. With several marriages the across-lines get their own heights so
+  // they never cross or merge: going left, the leftmost turns highest; going right, the rightmost does.
+  type Elbow = { key: string; x0: number; y0: number; x1: number; endY: number; floor: number; top: number }
+  const elbowsByContainer = new Map<Element, Elbow[]>()
   for (const group of canvas.querySelectorAll<HTMLElement>('.children[data-link-a]')) {
     const cardA = cardOf(group.dataset.linkA)
     const cardB = cardOf(group.dataset.linkB)
@@ -543,23 +629,50 @@ const updateInLawLinks = (): void => {
     }
     const same = group.dataset.linkA === group.dataset.linkB
     const [left, right] = boxA.left <= boxB.left ? [boxA, boxB] : [boxB, boxA]
-    const x0 = same ? boxA.left + boxA.width / 2 : (left.right + right.left) / 2
-    const y0 = same ? boxA.bottom : left.top + Math.min(left.height, right.height) / 2
+    const middle = marriageMiddle.get(`${group.dataset.linkA}|${group.dataset.linkB}`)
+    const x0 = middle ? middle.x : same ? boxA.left + boxA.width / 2 : (left.right + right.left) / 2
+    const y0 = middle ? middle.y : same ? boxA.bottom : left.top + Math.min(left.height, right.height) / 2
     const items = group.querySelectorAll<HTMLElement>(':scope > .node')
     // one child: straight down to that child's card; several: down to the bar over them
     const firstItemBox = items.length === 1 ? boxInCanvas(items[0], canvas) : null
     const endY = firstItemBox ? firstItemBox.top + 2 : groupBox.top + 1
-    const x1 = groupBox.left + groupBox.width / 2
-    const turnY = Math.max(y0 + 12, groupBox.top - 16)
-    links.push({
+    const elbow: Elbow = {
       key: `marriage-${group.dataset.linkA}-${group.dataset.linkB}`,
-      d: `M ${x0} ${y0} L ${x0} ${turnY} L ${x1} ${turnY} L ${x1} ${endY}`,
-    })
+      x0,
+      y0,
+      x1: groupBox.left + groupBox.width / 2,
+      endY,
+      floor: Math.max(y0, boxA.bottom, boxB.bottom),
+      top: groupBox.top,
+    }
+    const container = group.parentElement ?? group
+    elbowsByContainer.set(container, [...(elbowsByContainer.get(container) ?? []), elbow])
+  }
+
+  for (const elbows of elbowsByContainer.values()) {
+    const goingLeft = elbows.filter((e) => e.x1 < e.x0 - 1).sort((a, b) => a.x0 - b.x0)
+    const goingRight = elbows.filter((e) => e.x1 > e.x0 + 1).sort((a, b) => b.x0 - a.x0)
+    const straight = elbows.filter((e) => Math.abs(e.x1 - e.x0) <= 1)
+    const band = Math.max(...elbows.map((e) => e.floor)) + 12
+    const lowest = Math.min(...elbows.map((e) => e.top)) - 6
+    const rank = new Map<Elbow, number>()
+    goingLeft.forEach((e, index) => rank.set(e, index))
+    goingRight.forEach((e, index) => rank.set(e, index))
+    for (const e of [...goingLeft, ...goingRight, ...straight]) {
+      const turnY =
+        elbows.length === 1
+          ? Math.max(e.y0 + 12, e.top - 16)
+          : Math.min(lowest, Math.max(e.y0 + 12, band + (rank.get(e) ?? 0) * 8))
+      links.push({ key: e.key, d: `M ${e.x0} ${e.y0} L ${e.x0} ${turnY} L ${e.x1} ${turnY} L ${e.x1} ${e.endY}` })
+    }
   }
 
   // Only update when something moved, so redrawing the SVG doesn't re-trigger the observer forever.
   if (JSON.stringify(links) !== JSON.stringify(inLawLinks.value)) {
     inLawLinks.value = links
+  }
+  if (JSON.stringify(labels) !== JSON.stringify(marriageLabels.value)) {
+    marriageLabels.value = labels
   }
 }
 
@@ -673,6 +786,10 @@ const resolveChildUnits = (unitKey: string): FamilyUnit[] => {
 
 const initialExpandDepth = computed(() => (selectedParentUnit.value ? 1 : 0))
 
+/** "A & B", or for several spouses the person first: "AN & MỘT & HAI". */
+const unitLabel = (unit: FamilyUnit): string =>
+  (unit.host ? [unit.host, ...(unit.spouses ?? [])] : unit.members).map((member) => member.name).join(' & ')
+
 const selectedRootLabel = computed(() => {
   if (!selectedUnitKey.value) {
     return ''
@@ -683,7 +800,7 @@ const selectedRootLabel = computed(() => {
     return ''
   }
 
-  return selectedUnit.members.map((member) => member.name).join(' & ')
+  return unitLabel(selectedUnit)
 })
 
 const focusFromMember = (memberId: string): void => {
@@ -758,8 +875,8 @@ const describeSearchResult = (member: FamilyMember): string => {
   const parentNames = [getMemberName(member.fatherId), getMemberName(member.motherId)].filter(Boolean)
   if (parentNames.length > 0) {
     parts.push(`Con của ${parentNames.join(' & ')}`)
-  } else if (member.spouseId && getMemberName(member.spouseId)) {
-    parts.push(`Vợ/Chồng: ${getMemberName(member.spouseId)}`)
+  } else if (spousesOf(member).length) {
+    parts.push(`Vợ/Chồng: ${spousesOf(member).map((spouse) => spouse.name).join(', ')}`)
   }
 
   return parts.join(' · ')
@@ -997,6 +1114,7 @@ const describeForPrint = (member: FamilyMember): string => {
   if (props.showDeathDate && member.deathDate) details.push(`Ngày mất: ${formatPrintDate(member.deathDate)}`)
   const lunar = member.deathDateLunar?.trim() || solarDateTextToLunarText(member.deathDate)
   if (props.showDeathDate && lunar) details.push(`Ngày mất (âm lịch): ${lunar}`)
+  if (props.showDeathDate && member.deceased && !member.deathDate && !lunar) details.push('Đã mất (không rõ ngày mất)')
   const place = props.showMemorialPlace ? memorialPlaceLabel(member, getMemberById) : ''
   if (place) details.push(`Nơi giỗ: ${place}`)
 
@@ -1026,19 +1144,36 @@ const buildPrintHtml = (scope: PrintScope): string => {
   const lines: string[] = []
   const seen = new Set<string>()
 
-  const walk = (unit: FamilyUnit, generation: number) => {
+  const walk = (unit: FamilyUnit, generation: number, parentUnit?: FamilyUnit) => {
     if (seen.has(unit.key)) return
     seen.add(unit.key)
 
     const owner =
       unitParentLinks.value.primary.get(unit.key)?.owner ??
+      unit.host ??
       unit.members.find((member) => member.gender === 'male') ??
       unit.members[0]
-    const partners = unit.members.filter((member) => member.id !== owner.id)
-    const partnerLabel = (partner: FamilyMember) =>
-      partner.gender === 'female' ? 'Vợ' : partner.gender === 'male' ? 'Chồng' : 'Vợ/Chồng'
+    // Several spouses: host first, then Vợ/Chồng 1, 2, … in order
+    const ordered = unit.host ? [unit.host, ...(unit.spouses ?? [])] : unit.members
+    const partners = ordered.filter((member) => member.id !== owner.id)
+    const partnerLabel = (partner: FamilyMember) => {
+      if (unit.host && partner.id !== unit.host.id) {
+        const order = (unit.spouses ?? []).findIndex((spouse) => spouse.id === partner.id) + 1
+        return spouseOrderLabel(unit.host, partner, order)
+      }
+      return partner.gender === 'female' ? 'Vợ' : partner.gender === 'male' ? 'Chồng' : 'Vợ/Chồng'
+    }
 
-    const rows = [`<div class="row"><span class="gen">Đời ${generation}</span>${describeForPrint(owner)}</div>`]
+    // Child of a person with several spouses: say which spouse is the other parent
+    let fromSpouse = ''
+    if (parentUnit?.host) {
+      const other = (parentUnit.spouses ?? []).find((spouse) => spouse.id === owner.fatherId || spouse.id === owner.motherId)
+      if (other) {
+        fromSpouse = ` <span class="details">(con của ${escapeHtml(`${honorific(other)}${other.name}`)})</span>`
+      }
+    }
+
+    const rows = [`<div class="row"><span class="gen">Đời ${generation}</span>${describeForPrint(owner)}${fromSpouse}</div>`]
     for (const partner of partners) {
       const parents = getInLawParents(partner.id)?.members ?? []
       const from = parents.length
@@ -1046,17 +1181,12 @@ const buildPrintHtml = (scope: PrintScope): string => {
         : ''
       rows.push(`<div class="row sub">${partnerLabel(partner)}: ${describeForPrint(partner)}${from}</div>`)
     }
-    for (const host of unit.members) {
-      for (const ex of getFormerSpouses(host.id)) {
-        rows.push(`<div class="row sub">${partnerLabel(ex)} trước (đã ly hôn): ${describeForPrint(ex)}</div>`)
-      }
-    }
 
     const indent = generation - scope.startGeneration(scope.roots[0] ?? unit)
     lines.push(`<section class="unit" style="margin-left:${Math.max(0, indent) * 2.2}em">${rows.join('')}</section>`)
 
     for (const child of getChildUnits(unit.key)) {
-      walk(child, generation + 1)
+      walk(child, generation + 1, unit)
     }
   }
 
@@ -1104,7 +1234,7 @@ const currentPrintScope = (): PrintScope => {
   const unit = unitKey ? units.value.unitMap.get(unitKey) : undefined
   if (unit) {
     const generation = generationOfUnit(unit.key)
-    return { roots: [unit], label: unit.members.map((m) => m.name).join(' & '), startGeneration: () => generation }
+    return { roots: [unit], label: unitLabel(unit), startGeneration: () => generation }
   }
   return { roots: rootUnits.value, label: '', startGeneration: () => 1 }
 }
@@ -1511,6 +1641,9 @@ onBeforeUnmount(() => {
       <!-- Lines for a married-in child: down from their parents, and across to the partner they married -->
       <svg class="inlaw-links" aria-hidden="true">
         <path v-for="link in inLawLinks" :key="link.key" :d="link.d" />
+        <text v-for="label in marriageLabels" :key="label.key" :x="label.x" :y="label.y" class="marriage-label">
+          {{ label.text }}
+        </text>
       </svg>
       <ul class="tree-root">
         <FamilyTreeNode
@@ -1525,7 +1658,6 @@ onBeforeUnmount(() => {
           :member-name-by-id="getMemberName"
           :member-by-id="getMemberById"
           :in-law-parents-resolver="getInLawParents"
-          :former-spouses-resolver="getFormerSpouses"
           :can-manage="canManage"
           :show-birth-date="showBirthDate"
           :show-death-date="showDeathDate"
@@ -1749,6 +1881,14 @@ onBeforeUnmount(() => {
   fill: none;
   stroke: #9b3a24;
   stroke-width: 2;
+}
+
+.inlaw-links .marriage-label {
+  fill: #8a5a2b;
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 600;
+  text-anchor: middle;
 }
 
 .tree-canvas {
@@ -1994,7 +2134,8 @@ onBeforeUnmount(() => {
   position: sticky;
   left: 0;
   top: 0;
-  z-index: 9;
+  /* above the totals, buttons and branch bar that scroll up underneath it */
+  z-index: 12;
   margin: 0 0 0.8rem;
   max-width: none;
 }

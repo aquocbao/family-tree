@@ -3,6 +3,7 @@ import { computed, inject, type Ref } from 'vue'
 import type { FamilyMember } from '../types/family'
 import { solarDateTextToLunarText } from '../utils/lunar'
 import { memorialPlaceLabel } from '../utils/memorial'
+import { spouseIdsOf } from '../utils/spouses'
 
 const props = withDefaults(
   defineProps<{
@@ -58,9 +59,17 @@ const genderClass = computed(() => {
 
 const isContentHidden = computed(() => Boolean(props.member.isHidden))
 
+// Every spouse's name (several spouses → "A, B")
+const spouseNames = computed(() => {
+  const names = spouseIdsOf(props.member)
+    .map((id) => memberById(id)?.name)
+    .filter((name): name is string => Boolean(name))
+  return names.length ? names.join(', ') : props.spouseName ?? ''
+})
+
 const canShowSpouse = computed(() => {
   const hasBothParents = Boolean(props.member.fatherId && props.member.motherId)
-  return props.showSpouse && hasBothParents && Boolean(props.spouseName)
+  return props.showSpouse && hasBothParents && Boolean(spouseNames.value)
 })
 
 const lunarDeathDate = computed(
@@ -74,7 +83,9 @@ const memorialPlace = computed(() =>
 )
 
 // Has a (lunar) death date → shown on a grey card
-const isDeceased = computed(() => Boolean(lunarDeathDate.value))
+const isDeceased = computed(() => Boolean(props.member.deceased || lunarDeathDate.value))
+// Marked đã mất but no date known
+const deathDateUnknown = computed(() => Boolean(props.member.deceased && !props.member.deathDate && !lunarDeathDate.value))
 
 const formatDate = (value?: string): string => {
   if (!value) {
@@ -132,10 +143,11 @@ const formatDate = (value?: string): string => {
       <p v-if="showBirthDate"><strong>Ngày sinh:</strong> {{ formatDate(member.birthDate) }}</p>
       <p v-if="showDeathDate && member.deathDate"><strong>Ngày mất:</strong> {{ formatDate(member.deathDate) }}</p>
       <p v-if="showDeathDate && lunarDeathDate"><strong>Ngày mất (âm lịch):</strong> {{ lunarDeathDate }}</p>
+      <p v-if="showDeathDate && deathDateUnknown"><strong>Đã mất</strong> (không rõ ngày mất)</p>
       <p v-if="memorialPlace" class="memorial-place">
         <strong>Nơi giỗ:</strong> {{ memorialPlace }}
       </p>
-      <p v-if="canShowSpouse"><strong>Vợ/Chồng:</strong> {{ spouseName }}</p>
+      <p v-if="canShowSpouse"><strong>Vợ/Chồng:</strong> {{ spouseNames }}</p>
     </template>
 
     <div class="actions">

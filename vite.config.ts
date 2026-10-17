@@ -22,6 +22,8 @@ type RawMember = {
   motherId?: unknown
   spouseId?: unknown
   formerSpouseId?: unknown
+  spouseIds?: unknown
+  deceased?: unknown
   spouseOnRight?: unknown
   isHidden?: unknown
 }
@@ -106,7 +108,10 @@ const isValidMember = (value: unknown): value is RawMember => {
     isOptionalString(member.motherId) &&
     isOptionalString(member.spouseId) &&
     isOptionalString(member.formerSpouseId) &&
+    (member.spouseIds === undefined ||
+      (Array.isArray(member.spouseIds) && member.spouseIds.length <= 20 && member.spouseIds.every((id: unknown) => typeof id === 'string'))) &&
     (member.spouseOnRight === undefined || typeof member.spouseOnRight === 'boolean') &&
+    (member.deceased === undefined || typeof member.deceased === 'boolean') &&
     (member.isHidden === undefined || typeof member.isHidden === 'boolean')
   )
 }

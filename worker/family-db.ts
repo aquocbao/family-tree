@@ -49,7 +49,10 @@ const isValidMember = (value: unknown): boolean => {
     isOptionalString(m.motherId) &&
     isOptionalString(m.spouseId) &&
     isOptionalString(m.formerSpouseId) &&
+    (m.spouseIds === undefined ||
+      (Array.isArray(m.spouseIds) && m.spouseIds.length <= 20 && m.spouseIds.every((id: unknown) => typeof id === 'string'))) &&
     isOptionalBool(m.spouseOnRight) &&
+    isOptionalBool(m.deceased) &&
     isOptionalBool(m.isHidden)
   )
 }

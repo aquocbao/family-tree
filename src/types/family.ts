@@ -17,10 +17,15 @@ export interface FamilyMember {
   gender: FamilyGender
   fatherId?: string
   motherId?: string
+  /** Vợ/chồng, in order (Vợ 1, Vợ 2, …). Kept in sync on both people. */
+  spouseIds?: string[]
+  /** First spouse (= spouseIds[0]); kept for older data and code. */
   spouseId?: string
-  /** Vợ/chồng trước (đã ly hôn). Set on either person of the former couple. */
+  /** @deprecated Divorce was removed; an older value is read as one more spouse. */
   formerSpouseId?: string
   spouseOnRight?: boolean
+  /** Đã mất, ngày mất không rõ */
+  deceased?: boolean
   isHidden?: boolean
 }
 
@@ -34,7 +39,12 @@ export interface FamilyDatabase {
 
 export interface FamilyUnit {
   key: string
+  /** Left → right as drawn. */
   members: FamilyMember[]
+  /** Several spouses: the person in the middle… */
+  host?: FamilyMember
+  /** …and their spouses in order (Vợ/Chồng 1, 2, …). */
+  spouses?: FamilyMember[]
 }
 
 export interface FamilyTreeSettings {

@@ -3,7 +3,8 @@
     {
       "id": "PVL1",
       "name": "PHẠM VĂN LƯƠNG",
-      "deathDateLunar": "23-05",
+      "position": 9,
+      "deathDateLunar": "20-05",
       "memorialHostId": "PTC",
       "gender": "male",
       "fatherId": "PVDAN",
@@ -39,7 +40,8 @@
       "id": "PVD",
       "name": "PHẠM VĂN ĐEN",
       "position": 5,
-      "memorialHostId": "PHC",
+      "deathDateLunar": "24-05",
+      "memorialHostId": "PDN",
       "gender": "male",
       "fatherId": "PVL1",
       "motherId": "NTB2",
@@ -208,6 +210,8 @@
       "name": "PHẠM VĂN MINH",
       "deathDateLunar": "17-02",
       "gender": "male",
+      "fatherId": "PVNHAN",
+      "motherId": "TTBAO",
       "spouseId": "NTH"
     },
     {
@@ -251,11 +255,12 @@
       "id": "PTTN",
       "name": "PHẠM THỊ THANH NHẪN",
       "gender": "female",
-      "fatherId": "PVD"
+      "fatherId": "PVD",
+      "spouseId": "HVQ"
     },
     {
       "id": "LTK",
-      "name": "LÊ THỊ KHIEN",
+      "name": "LÊ THỊ KHEN",
       "gender": "female",
       "spouseId": "PVD"
     },
@@ -265,7 +270,8 @@
       "position": 2,
       "gender": "male",
       "fatherId": "PVD",
-      "motherId": "LTK"
+      "motherId": "LTK",
+      "spouseId": "NTKT"
     },
     {
       "id": "PVC",
@@ -282,7 +288,8 @@
       "position": 4,
       "gender": "male",
       "fatherId": "PVD",
-      "motherId": "LTK"
+      "motherId": "LTK",
+      "spouseId": "NTNT"
     },
     {
       "id": "PDN",
@@ -290,7 +297,8 @@
       "position": 5,
       "gender": "male",
       "fatherId": "PVD",
-      "motherId": "LTK"
+      "motherId": "LTK",
+      "spouseId": "NKT"
     },
     {
       "id": "VTHN",
@@ -359,6 +367,206 @@
       "gender": "female",
       "fatherId": "MVL",
       "motherId": "PTNA"
+    },
+    {
+      "id": "PTL",
+      "name": "PHẠM THÀNH LUÂN",
+      "position": 2,
+      "gender": "male",
+      "fatherId": "PTTAM"
+    },
+    {
+      "id": "PTKQ",
+      "name": "PHẠM THỊ KIM QUYÊN",
+      "position": 3,
+      "gender": "female",
+      "fatherId": "PTTAM"
+    },
+    {
+      "id": "PTNGH",
+      "name": "PHẠM THẾ NGHIỆP",
+      "position": 2,
+      "gender": "male",
+      "fatherId": "PHC"
+    },
+    {
+      "id": "PNAT",
+      "name": "PHẠM NGUYỄN ÁI THY",
+      "position": 2,
+      "gender": "female",
+      "fatherId": "PDN"
+    },
+    {
+      "id": "PNLD",
+      "name": "PHẠM NGUYỄN LINH ĐAN",
+      "position": 3,
+      "gender": "female",
+      "fatherId": "PDN"
+    },
+    {
+      "id": "HPAT",
+      "name": "HOÀNG PHẠM ANH TUẤN",
+      "position": 2,
+      "gender": "male",
+      "motherId": "PTTN"
+    },
+    {
+      "id": "HNPN",
+      "name": "HOÀNG NGỌC PHƯƠNG NGHI",
+      "position": 3,
+      "gender": "female",
+      "motherId": "PTTN"
+    },
+    {
+      "id": "NTKT",
+      "name": "NGÔ THỊ KIM TRANG",
+      "gender": "female",
+      "spouseId": "PTTAM"
+    },
+    {
+      "id": "NTNT",
+      "name": "NGUYỄN THỊ NGỌC TRANG",
+      "gender": "female",
+      "spouseId": "PHC"
+    },
+    {
+      "id": "NKT",
+      "name": "NGUYỄN KIM TIẾN",
+      "gender": "female",
+      "spouseId": "PDN"
+    },
+    {
+      "id": "HVQ",
+      "name": "HOÀNG VĂN QUYẾT",
+      "gender": "male",
+      "spouseId": "PTTN",
+      "spouseOnRight": true
+    },
+    {
+      "id": "PTDDIEU",
+      "name": "PHẠM THỊ DIỆU",
+      "position": 2,
+      "deathDateLunar": "16-08",
+      "gender": "female",
+      "fatherId": "PVDAN",
+      "motherId": "NTL",
+      "spouseId": "KT"
+    },
+    {
+      "id": "NTN",
+      "name": "NGUYỄN THỊ NƯƠNG",
+      "position": 4,
+      "deathDateLunar": "15-01",
+      "memorialHostId": "PDN",
+      "gender": "female",
+      "fatherId": "PVDAN",
+      "motherId": "NTL"
+    },
+    {
+      "id": "PVNHUT",
+      "name": "PHẠM VĂN NHỨT",
+      "position": 6,
+      "deathDateLunar": "18-05",
+      "gender": "male",
+      "fatherId": "PVDAN",
+      "motherId": "NTL"
+    },
+    {
+      "id": "PTBAY",
+      "name": "PHẠM THỊ BẢY",
+      "position": 7,
+      "gender": "female",
+      "fatherId": "PVDAN",
+      "motherId": "NTL",
+      "spouseId": "HVM"
+    },
+    {
+      "id": "PTUT",
+      "name": "PHẠM THỊ ÚT",
+      "position": 10,
+      "deathDateLunar": "19-01",
+      "gender": "female",
+      "fatherId": "PVDAN",
+      "motherId": "NTL",
+      "spouseId": "NVN"
+    },
+    {
+      "id": "KT",
+      "name": "KHƯU THƠ",
+      "gender": "male",
+      "spouseId": "PTDDIEU",
+      "spouseOnRight": true
+    },
+    {
+      "id": "HVM",
+      "name": "HỒ VĂN MÍT",
+      "deathDateLunar": "26-08",
+      "gender": "male",
+      "spouseId": "PTBAY",
+      "spouseOnRight": true
+    },
+    {
+      "id": "NVN",
+      "name": "NGUYỄN VĂN NHỎ",
+      "deathDateLunar": "10-10",
+      "gender": "male",
+      "spouseId": "PTUT",
+      "spouseOnRight": true
+    },
+    {
+      "id": "PVNHAN",
+      "name": "PHẠM VĂN NHÀN",
+      "position": 6,
+      "deathDateLunar": "02-07",
+      "gender": "male",
+      "fatherId": "PVNHI",
+      "spouseId": "TTBAO"
+    },
+    {
+      "id": "TTBAO",
+      "name": "TRƯƠNG THỊ BÁO",
+      "gender": "female",
+      "spouseId": "PVNHAN"
+    },
+    {
+      "id": "PVNHI",
+      "name": "PHẠM VĂN NHI",
+      "gender": "male"
+    },
+    {
+      "id": "PVSAM",
+      "name": "PHẠM VĂN SẬM",
+      "position": 2,
+      "gender": "male",
+      "fatherId": "PVNHI"
+    },
+    {
+      "id": "PTLU",
+      "name": "PHẠM THỊ LU",
+      "position": 3,
+      "gender": "female",
+      "fatherId": "PVNHI"
+    },
+    {
+      "id": "PTB",
+      "name": "PHẠM THỊ BON",
+      "position": 4,
+      "gender": "female",
+      "fatherId": "PVNHI"
+    },
+    {
+      "id": "PTNAO",
+      "name": "PHẠM THỊ NÀO",
+      "position": 5,
+      "gender": "female",
+      "fatherId": "PVNHI"
+    },
+    {
+      "id": "PVVAN",
+      "name": "PHẠM VĂN VÂN",
+      "position": 7,
+      "gender": "male",
+      "fatherId": "PVNHI"
     }
   ],
   "settings": {
@@ -367,10 +575,10 @@
     "showSpouse": false,
     "showViewDetail": true,
     "showMemorialPlace": true,
-    "notificationMonths": 3,
+    "notificationMonths": 1,
     "lunarEvents": [
       {
-        "name": "Mồng 1 Tết Nguyên Đán",
+        "name": "TẾT - Mồng 1 Tết Nguyên Đán",
         "day": 1,
         "month": 1
       },
@@ -411,27 +619,39 @@
         "lastDayOfMonth": true
       },
       {
-        "name": "GPMN- Thống Nhất Đất Nước",
+        "name": "Ngày GPMN- Thống Nhất Đất Nước",
         "day": 30,
         "month": 4,
         "calendar": "solar"
       },
       {
-        "name": "QT Lao Động",
+        "name": "Ngày Quốc Tế Lao Động",
         "day": 1,
         "month": 5,
         "calendar": "solar"
       },
       {
-        "name": "Quốc Khánh CHXHCNVN",
+        "name": "Ngày Quốc Khánh CHXHCNVN",
         "day": 2,
         "month": 9,
         "calendar": "solar"
       },
       {
-        "name": "Ngày Văn Hóa VN",
+        "name": "Ngày Văn Hóa Việt Nam",
         "day": 24,
         "month": 11,
+        "calendar": "solar"
+      },
+      {
+        "name": "Ngày Nhà Giáo Việt Nam",
+        "day": 20,
+        "month": 11,
+        "calendar": "solar"
+      },
+      {
+        "name": "Ngày khai giảng",
+        "day": 5,
+        "month": 9,
         "calendar": "solar"
       }
     ]
@@ -440,7 +660,8 @@
     {
       "id": "PVL1",
       "name": "PHẠM VĂN LƯƠNG",
-      "deathDateLunar": "23-05",
+      "position": 9,
+      "deathDateLunar": "20-05",
       "memorialHostId": "PTC",
       "gender": "male",
       "fatherId": "PVDAN",
@@ -476,7 +697,8 @@
       "id": "PVD",
       "name": "PHẠM VĂN ĐEN",
       "position": 5,
-      "memorialHostId": "PHC",
+      "deathDateLunar": "24-05",
+      "memorialHostId": "PDN",
       "gender": "male",
       "fatherId": "PVL1",
       "motherId": "NTB2",
@@ -645,6 +867,8 @@
       "name": "PHẠM VĂN MINH",
       "deathDateLunar": "17-02",
       "gender": "male",
+      "fatherId": "PVNHAN",
+      "motherId": "TTBAO",
       "spouseId": "NTH"
     },
     {
@@ -688,11 +912,12 @@
       "id": "PTTN",
       "name": "PHẠM THỊ THANH NHẪN",
       "gender": "female",
-      "fatherId": "PVD"
+      "fatherId": "PVD",
+      "spouseId": "HVQ"
     },
     {
       "id": "LTK",
-      "name": "LÊ THỊ KHIEN",
+      "name": "LÊ THỊ KHEN",
       "gender": "female",
       "spouseId": "PVD"
     },
@@ -702,7 +927,8 @@
       "position": 2,
       "gender": "male",
       "fatherId": "PVD",
-      "motherId": "LTK"
+      "motherId": "LTK",
+      "spouseId": "NTKT"
     },
     {
       "id": "PVC",
@@ -719,7 +945,8 @@
       "position": 4,
       "gender": "male",
       "fatherId": "PVD",
-      "motherId": "LTK"
+      "motherId": "LTK",
+      "spouseId": "NTNT"
     },
     {
       "id": "PDN",
@@ -727,7 +954,8 @@
       "position": 5,
       "gender": "male",
       "fatherId": "PVD",
-      "motherId": "LTK"
+      "motherId": "LTK",
+      "spouseId": "NKT"
     },
     {
       "id": "VTHN",
@@ -796,6 +1024,219 @@
       "gender": "female",
       "fatherId": "MVL",
       "motherId": "PTNA"
+    },
+    {
+      "id": "PTL",
+      "name": "PHẠM THÀNH LUÂN",
+      "position": 2,
+      "gender": "male",
+      "fatherId": "PTTAM"
+    },
+    {
+      "id": "PTKQ",
+      "name": "PHẠM THỊ KIM QUYÊN",
+      "position": 3,
+      "gender": "female",
+      "fatherId": "PTTAM"
+    },
+    {
+      "id": "PTNGH",
+      "name": "PHẠM THẾ NGHIỆP",
+      "position": 2,
+      "gender": "male",
+      "fatherId": "PHC"
+    },
+    {
+      "id": "PNAT",
+      "name": "PHẠM NGUYỄN ÁI THY",
+      "position": 2,
+      "gender": "female",
+      "fatherId": "PDN"
+    },
+    {
+      "id": "PNLD",
+      "name": "PHẠM NGUYỄN LINH ĐAN",
+      "position": 3,
+      "gender": "female",
+      "fatherId": "PDN"
+    },
+    {
+      "id": "HPAT",
+      "name": "HOÀNG PHẠM ANH TUẤN",
+      "position": 2,
+      "gender": "male",
+      "motherId": "PTTN"
+    },
+    {
+      "id": "HNPN",
+      "name": "HOÀNG NGỌC PHƯƠNG NGHI",
+      "position": 3,
+      "gender": "female",
+      "motherId": "PTTN"
+    },
+    {
+      "id": "NTKT",
+      "name": "NGÔ THỊ KIM TRANG",
+      "gender": "female",
+      "spouseId": "PTTAM"
+    },
+    {
+      "id": "NTNT",
+      "name": "NGUYỄN THỊ NGỌC TRANG",
+      "gender": "female",
+      "spouseId": "PHC"
+    },
+    {
+      "id": "NKT",
+      "name": "NGUYỄN KIM TIẾN",
+      "gender": "female",
+      "spouseId": "PDN"
+    },
+    {
+      "id": "HVQ",
+      "name": "HOÀNG VĂN QUYẾT",
+      "gender": "male",
+      "spouseId": "PTTN",
+      "spouseOnRight": true
+    },
+    {
+      "id": "PTDDIEU",
+      "name": "PHẠM THỊ DIỆU",
+      "position": 2,
+      "deathDateLunar": "16-08",
+      "gender": "female",
+      "fatherId": "PVDAN",
+      "motherId": "NTL",
+      "spouseId": "KT"
+    },
+    {
+      "id": "NTN",
+      "name": "NGUYỄN THỊ NƯƠNG",
+      "position": 4,
+      "deathDateLunar": "15-01",
+      "memorialHostId": "PDN",
+      "gender": "female",
+      "fatherId": "PVDAN",
+      "motherId": "NTL"
+    },
+    {
+      "id": "PVNHUT",
+      "name": "PHẠM VĂN NHỨT",
+      "position": 6,
+      "deathDateLunar": "18-05",
+      "gender": "male",
+      "fatherId": "PVDAN",
+      "motherId": "NTL"
+    },
+    {
+      "id": "PTBAY",
+      "name": "PHẠM THỊ BẢY",
+      "position": 7,
+      "gender": "female",
+      "fatherId": "PVDAN",
+      "motherId": "NTL",
+      "spouseId": "HVM"
+    },
+    {
+      "id": "PTUT",
+      "name": "PHẠM THỊ ÚT",
+      "position": 10,
+      "deathDateLunar": "19-01",
+      "gender": "female",
+      "fatherId": "PVDAN",
+      "motherId": "NTL",
+      "spouseId": "NVN"
+    },
+    {
+      "id": "KT",
+      "name": "KHƯU THƠ",
+      "gender": "male",
+      "spouseId": "PTDDIEU",
+      "spouseOnRight": true
+    },
+    {
+      "id": "HVM",
+      "name": "HỒ VĂN MÍT",
+      "deathDateLunar": "26-08",
+      "gender": "male",
+      "spouseId": "PTBAY",
+      "spouseOnRight": true
+    },
+    {
+      "id": "NVN",
+      "name": "NGUYỄN VĂN NHỎ",
+      "deathDateLunar": "10-10",
+      "gender": "male",
+      "spouseId": "PTUT",
+      "spouseOnRight": true
+    },
+    {
+      "id": "PVNHAN",
+      "name": "PHẠM VĂN NHÀN",
+      "position": 6,
+      "deathDateLunar": "02-07",
+      "gender": "male",
+      "fatherId": "PVNHI",
+      "spouseIds": [
+        "TTBAO",
+        "VTCONG"
+      ],
+      "spouseId": "TTBAO"
+    },
+    {
+      "id": "TTBAO",
+      "name": "TRƯƠNG THỊ BÁO",
+      "gender": "female",
+      "spouseId": "PVNHAN"
+    },
+    {
+      "id": "PVNHI",
+      "name": "PHẠM VĂN NHI",
+      "gender": "male"
+    },
+    {
+      "id": "PVSAM",
+      "name": "PHẠM VĂN SẬM",
+      "position": 2,
+      "gender": "male",
+      "fatherId": "PVNHI"
+    },
+    {
+      "id": "PTLU",
+      "name": "PHẠM THỊ LU",
+      "position": 3,
+      "gender": "female",
+      "fatherId": "PVNHI"
+    },
+    {
+      "id": "PTB",
+      "name": "PHẠM THỊ BON",
+      "position": 4,
+      "gender": "female",
+      "fatherId": "PVNHI"
+    },
+    {
+      "id": "PTNAO",
+      "name": "PHẠM THỊ NÀO",
+      "position": 5,
+      "gender": "female",
+      "fatherId": "PVNHI"
+    },
+    {
+      "id": "PVVAN",
+      "name": "PHẠM VĂN VÂN",
+      "position": 7,
+      "gender": "male",
+      "fatherId": "PVNHI"
+    },
+    {
+      "id": "VTCONG",
+      "name": "VÕ THỊ CÔNG",
+      "gender": "female",
+      "spouseIds": [
+        "PVNHAN"
+      ],
+      "spouseId": "PVNHAN"
     }
   ],
   "pendingSettings": {
@@ -804,10 +1245,10 @@
     "showSpouse": false,
     "showViewDetail": true,
     "showMemorialPlace": true,
-    "notificationMonths": 3,
+    "notificationMonths": 1,
     "lunarEvents": [
       {
-        "name": "Mồng 1 Tết Nguyên Đán",
+        "name": "TẾT - Mồng 1 Tết Nguyên Đán",
         "day": 1,
         "month": 1
       },
@@ -848,30 +1289,42 @@
         "lastDayOfMonth": true
       },
       {
-        "name": "GPMN- Thống Nhất Đất Nước",
+        "name": "Ngày GPMN- Thống Nhất Đất Nước",
         "day": 30,
         "month": 4,
         "calendar": "solar"
       },
       {
-        "name": "QT Lao Động",
+        "name": "Ngày Quốc Tế Lao Động",
         "day": 1,
         "month": 5,
         "calendar": "solar"
       },
       {
-        "name": "Quốc Khánh CHXHCNVN",
+        "name": "Ngày Quốc Khánh CHXHCNVN",
         "day": 2,
         "month": 9,
         "calendar": "solar"
       },
       {
-        "name": "Ngày Văn Hóa VN",
+        "name": "Ngày Văn Hóa Việt Nam",
         "day": 24,
         "month": 11,
+        "calendar": "solar"
+      },
+      {
+        "name": "Ngày Nhà Giáo Việt Nam",
+        "day": 20,
+        "month": 11,
+        "calendar": "solar"
+      },
+      {
+        "name": "Ngày khai giảng",
+        "day": 5,
+        "month": 9,
         "calendar": "solar"
       }
     ]
   },
-  "pendingUpdatedAt": "2026-10-17T07:15:58.809Z"
+  "pendingUpdatedAt": "2026-10-17T13:07:10.648Z"
 }
