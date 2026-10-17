@@ -76,6 +76,9 @@ const lunarDeathDate = computed(
   () => props.member.deathDateLunar?.trim() || solarDateTextToLunarText(props.member.deathDate),
 )
 
+const selectLineage = inject<((id: string) => void) | undefined>('selectLineage', undefined)
+const lineageMemberId = inject<Ref<string | null> | undefined>('lineageMemberId', undefined)
+const isChosen = computed(() => lineageMemberId?.value === props.member.id)
 const memberById = inject<(id?: string) => FamilyMember | undefined>('familyMemberById', () => undefined)
 const showMemorialPlaceSetting = inject<Ref<boolean> | undefined>('showMemorialPlace', undefined)
 const memorialPlace = computed(() =>
@@ -168,6 +171,16 @@ const formatDate = (value?: string): string => {
           @click="$emit('viewDetail', member.id)"
         >
           Xem chi tiết
+        </button>
+        <button
+          v-if="selectLineage"
+          type="button"
+          class="lineage"
+          :class="{ 'is-chosen': isChosen }"
+          :title="isChosen ? 'Bỏ chọn, xem lại toàn bộ cây' : 'Chỉ xem dòng trực hệ: từ tổ tiên xuống người này'"
+          @click="selectLineage(member.id)"
+        >
+          {{ isChosen ? 'Bỏ chọn' : 'Chọn' }}
         </button>
 
         <template v-if="canManage">
@@ -292,6 +305,26 @@ const formatDate = (value?: string): string => {
 
 .detail:hover {
   background: #dde8ff;
+}
+
+.lineage {
+  border: 1px solid #c9a24a;
+  background: #fff8e6;
+  color: #6b3d0c;
+}
+
+.lineage:hover {
+  background: #fbe9bf;
+}
+
+.lineage.is-chosen {
+  border-color: #9b2a1c;
+  background: #9b2a1c;
+  color: #fff;
+}
+
+.lineage.is-chosen:hover {
+  background: #7e1f14;
 }
 
 .edit {

@@ -40,6 +40,10 @@ const emit = defineEmits<{
 }>()
 
 const selectedUnitKey = ref<string | null>(null)
+/** "Chọn" on a card: show only that person's direct line (dòng trực hệ) from the top ancestor down. */
+const lineageKey = ref<string | null>(null)
+/** the person whose "Chọn" was clicked (their card shows "Bỏ chọn") */
+const lineageMemberId = ref<string | null>(null)
 const treeWrapperRef = ref<HTMLElement | null>(null)
 
 /* Height of the notification bar, so the sticky controls sit below it in Full view */
@@ -367,7 +371,7 @@ const treeStats = computed(() => {
   }
 
   // Whole tree: count every member, even ones not reachable from a root
-  const counted = selectedUnitKey.value ? [...shown.values()] : props.members
+  const counted = selectedUnitKey.value || lineageKey.value ? [...shown.values()] : props.members
   const living = counted.filter((member) => !isDeceased(member)).length
   return { total: counted.length, living, generations }
 })
@@ -737,6 +741,9 @@ const getMemberById = (id?: string): FamilyMember | undefined => {
 
 // Cards look up other members (e.g. who hosts the đám giỗ)
 provide('familyMemberById', getMemberById)
+// "In" button on every card: open the print chooser for that person
+provide('selectLineage', (memberId: string) => selectLineage(memberId))
+provide('lineageMemberId', lineageMemberId)
 provide(
   'showMemorialPlace',
   computed(() => props.showMemorialPlace),
@@ -755,9 +762,12 @@ const selectedUnit = computed((): FamilyUnit | undefined => {
 })
 
 // Parent unit of the focused branch (the unit holding the father/mother of a member in the selected unit).
+// While printing one person's tree: start at that person (no parent row above).
+const printBranchOnly = ref(false)
+
 const selectedParentUnit = computed((): FamilyUnit | undefined => {
   const unit = selectedUnit.value
-  if (!unit) {
+  if (!unit || printBranchOnly.value) {
     return undefined
   }
 
@@ -765,7 +775,26 @@ const selectedParentUnit = computed((): FamilyUnit | undefined => {
   return link ? units.value.unitMap.get(link.parentKey) : undefined
 })
 
+// Dòng trực hệ: the chosen person's family and every ancestor family up to the top, in order (top first).
+const lineagePath = computed((): FamilyUnit[] => {
+  const path: FamilyUnit[] = []
+  const seen = new Set<string>()
+  let key: string | undefined = lineageKey.value ?? undefined
+  while (key && !seen.has(key)) {
+    seen.add(key)
+    const unit = units.value.unitMap.get(key)
+    if (!unit) break
+    path.unshift(unit)
+    key = unitParentLinks.value.primary.get(key)?.parentKey
+  }
+  return path
+})
+
 const selectedRootUnits = computed(() => {
+  if (lineagePath.value.length) {
+    return [lineagePath.value[0]]
+  }
+
   const unit = selectedUnit.value
   if (!unit) {
     return rootUnits.value
@@ -775,7 +804,17 @@ const selectedRootUnits = computed(() => {
 })
 
 // In focus mode the parent node only shows the selected branch (not the siblings).
+// In the direct line, each ancestor shows only the next family down the line.
 const resolveChildUnits = (unitKey: string): FamilyUnit[] => {
+  const path = lineagePath.value
+  if (path.length) {
+    const index = path.findIndex((unit) => unit.key === unitKey)
+    if (index !== -1 && index < path.length - 1) {
+      return [path[index + 1]]
+    }
+    return getChildUnits(unitKey)
+  }
+
   const parentUnit = selectedParentUnit.value
   if (parentUnit && selectedUnit.value && unitKey === parentUnit.key) {
     return [selectedUnit.value]
@@ -784,7 +823,29 @@ const resolveChildUnits = (unitKey: string): FamilyUnit[] => {
   return getChildUnits(unitKey)
 }
 
-const initialExpandDepth = computed(() => (selectedParentUnit.value ? 1 : 0))
+const initialExpandDepth = computed(() =>
+  lineagePath.value.length ? lineagePath.value.length - 1 : selectedParentUnit.value ? 1 : 0,
+)
+
+const lineageLabel = computed(() => {
+  const target = lineagePath.value[lineagePath.value.length - 1]
+  return target ? unitLabel(target) : ''
+})
+
+const selectLineage = (memberId: string): void => {
+  if (lineageMemberId.value === memberId) {
+    clearFocusedTree() // "Bỏ chọn": back to the whole tree
+    return
+  }
+  const unitKey = units.value.memberToUnitKey.get(memberId)
+  if (!unitKey) return
+  lineageMemberId.value = memberId
+  resetExpandState()
+  selectedUnitKey.value = null
+  lineageKey.value = unitKey
+  highlightedMemberId.value = memberId
+  void nextTick(() => treeWrapperRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+}
 
 /** "A & B", or for several spouses the person first: "AN & MỘT & HAI". */
 const unitLabel = (unit: FamilyUnit): string =>
@@ -810,6 +871,8 @@ const focusFromMember = (memberId: string): void => {
   }
 
   resetExpandState()
+  lineageKey.value = null
+  lineageMemberId.value = null
   selectedUnitKey.value = unitKey
 }
 
@@ -903,6 +966,8 @@ const goToMember = async (memberId: string): Promise<void> => {
 
   // Show the whole tree and open every ancestor of the target node.
   selectedUnitKey.value = null
+  lineageKey.value = null
+  lineageMemberId.value = null
   const keys = new Set<string>()
   const visited = new Set<string>()
   let currentKey: string | undefined = parentUnitKeyByUnitKey.value.get(unitKey)
@@ -947,6 +1012,8 @@ const toggleExpandAll = (): void => {
 const clearFocusedTree = (): void => {
   resetExpandState()
   selectedUnitKey.value = null
+  lineageKey.value = null
+  lineageMemberId.value = null
 }
 
 const syncFullViewState = (): void => {
@@ -1138,7 +1205,13 @@ const generationOfUnit = (unitKey: string): number => {
 }
 
 /** What to print: the whole family, or one chosen person with all their descendants. */
-type PrintScope = { roots: FamilyUnit[]; label: string; startGeneration: (unit: FamilyUnit) => number }
+type PrintScope = {
+  roots: FamilyUnit[]
+  label: string
+  startGeneration: (unit: FamilyUnit) => number
+  /** which child families to print under a family (default: all of them) */
+  children?: (unitKey: string) => FamilyUnit[]
+}
 
 const buildPrintHtml = (scope: PrintScope): string => {
   const lines: string[] = []
@@ -1185,7 +1258,7 @@ const buildPrintHtml = (scope: PrintScope): string => {
     const indent = generation - scope.startGeneration(scope.roots[0] ?? unit)
     lines.push(`<section class="unit" style="margin-left:${Math.max(0, indent) * 2.2}em">${rows.join('')}</section>`)
 
-    for (const child of getChildUnits(unit.key)) {
+    for (const child of (scope.children ?? getChildUnits)(unit.key)) {
       walk(child, generation + 1, unit)
     }
   }
@@ -1194,7 +1267,7 @@ const buildPrintHtml = (scope: PrintScope): string => {
     walk(unit, scope.startGeneration(unit))
   }
 
-  const branch = scope.label ? `<p class="branch">Nhánh: ${escapeHtml(scope.label)}</p>` : ''
+  const branch = scope.label ? `<p class="branch">${escapeHtml(scope.label)}</p>` : ''
   return `<h1>${escapeHtml(document.title)}</h1>${branch}${lines.join('\n')}`
 }
 
@@ -1202,7 +1275,7 @@ type PrintLayout = 'list' | 'tree'
 const isPrintMenuOpen = ref(false)
 const printMenuRef = ref<HTMLElement | null>(null)
 
-const printScopeMode = ref<'all' | 'person'>('all')
+const printScopeMode = ref<'all' | 'person' | 'lineage'>('all')
 const printPersonId = ref('')
 
 const printableMembers = computed(() =>
@@ -1213,11 +1286,14 @@ const printableMembers = computed(() =>
 
 const togglePrintMenu = (): void => {
   isPrintMenuOpen.value = !isPrintMenuOpen.value
-  if (isPrintMenuOpen.value && selectedUnit.value && !printPersonId.value) {
-    // In "Xem chi tiết": suggest the person being viewed
-    const owner = unitParentLinks.value.primary.get(selectedUnit.value.key)?.owner ?? selectedUnit.value.members[0]
-    printPersonId.value = owner?.id ?? ''
-    printScopeMode.value = 'person'
+  if (isPrintMenuOpen.value && lineageKey.value) {
+    // Viewing a direct line ("Chọn"): print that by default
+    printScopeMode.value = 'lineage'
+    return
+  }
+  if (isPrintMenuOpen.value) {
+    // Nothing chosen with "Chọn": print the whole family by default
+    printScopeMode.value = 'all'
   }
 }
 
@@ -1227,14 +1303,28 @@ const printPersonUnitKey = computed(() =>
     : undefined,
 )
 
-const canPrint = computed(() => printScopeMode.value === 'all' || Boolean(printPersonUnitKey.value))
+const canPrint = computed(
+  () =>
+    printScopeMode.value === 'all' ||
+    (printScopeMode.value === 'lineage' && lineagePath.value.length > 0) ||
+    Boolean(printPersonUnitKey.value),
+)
 
 const currentPrintScope = (): PrintScope => {
+  if (printScopeMode.value === 'lineage' && lineagePath.value.length) {
+    // the direct line from the top ancestor to the chosen person, then all of that person's descendants
+    return {
+      roots: [lineagePath.value[0]],
+      label: `Dòng trực hệ của ${lineageLabel.value}`,
+      startGeneration: () => generationOfUnit(lineagePath.value[0].key),
+      children: resolveChildUnits,
+    }
+  }
   const unitKey = printPersonUnitKey.value
   const unit = unitKey ? units.value.unitMap.get(unitKey) : undefined
   if (unit) {
     const generation = generationOfUnit(unit.key)
-    return { roots: [unit], label: unitLabel(unit), startGeneration: () => generation }
+    return { roots: [unit], label: `Nhánh: ${unitLabel(unit)}`, startGeneration: () => generation }
   }
   return { roots: rootUnits.value, label: '', startGeneration: () => 1 }
 }
@@ -1324,7 +1414,12 @@ const printDiagram = async (): Promise<void> => {
   clone.style.zoom = '1'
 
   const styles = [...document.querySelectorAll('style, link[rel="stylesheet"]')].map((node) => node.outerHTML).join('\n')
-  const branch = selectedRootLabel.value ? `<p class="print-branch">Nhánh: ${escapeHtml(selectedRootLabel.value)}</p>` : ''
+  const branchText = lineageKey.value
+    ? `Dòng trực hệ của ${lineageLabel.value}`
+    : selectedRootLabel.value
+      ? `Nhánh: ${selectedRootLabel.value}`
+      : ''
+  const branch = branchText ? `<p class="print-branch">${escapeHtml(branchText)}</p>` : ''
 
   await printDocument(
     `<!doctype html><html lang="vi"><head><meta charset="utf-8"><base href="${location.origin}/">
@@ -1358,11 +1453,32 @@ const printAs = async (layout: PrintLayout): Promise<void> => {
       return
     }
 
+    // Diagram of the direct line: it is already on screen; open everything under the chosen person and print.
+    if (printScopeMode.value === 'lineage' && lineageKey.value) {
+      const previousAllExpanded = isAllExpanded.value
+      expandRequest.value = { keys: new Set(units.value.unitMap.keys()), nonce: Date.now() }
+      isAllExpanded.value = true
+      await nextTick()
+      await waitFrames(3)
+      try {
+        await printDiagram()
+      } finally {
+        if (!previousAllExpanded) {
+          expandRequest.value = { keys: new Set(), nonce: Date.now(), collapse: true }
+          isAllExpanded.value = false
+        }
+      }
+      return
+    }
+
     // Diagram: show the chosen branch (or the whole tree) fully expanded, print it, then put the view back.
     const previousKey = selectedUnitKey.value
+    const previousLineage = lineageKey.value
     const previousAllExpanded = isAllExpanded.value
     const targetKey = printPersonUnitKey.value ?? null
-    if (targetKey !== previousKey) {
+    printBranchOnly.value = Boolean(targetKey)
+    lineageKey.value = null
+    if (targetKey !== previousKey || printBranchOnly.value || previousLineage) {
       resetExpandState()
       selectedUnitKey.value = targetKey
       await nextTick()
@@ -1375,9 +1491,11 @@ const printAs = async (layout: PrintLayout): Promise<void> => {
     try {
       await printDiagram()
     } finally {
-      if (targetKey !== previousKey) {
+      if (targetKey !== previousKey || printBranchOnly.value || previousLineage) {
+        printBranchOnly.value = false
         resetExpandState()
         selectedUnitKey.value = previousKey
+        lineageKey.value = previousLineage
       } else if (!previousAllExpanded) {
         expandRequest.value = { keys: new Set(), nonce: Date.now(), collapse: true }
         isAllExpanded.value = false
@@ -1427,10 +1545,14 @@ watch(
     if (selectedUnitKey.value && !currentUnitMap.has(selectedUnitKey.value)) {
       selectedUnitKey.value = null
     }
+    if (lineageKey.value && !currentUnitMap.has(lineageKey.value)) {
+      lineageKey.value = null
+      lineageMemberId.value = null
+    }
   },
 )
 
-watch(selectedUnitKey, () => {
+watch([selectedUnitKey, lineageKey], () => {
   void centerOnRoot()
 })
 
@@ -1588,6 +1710,11 @@ onBeforeUnmount(() => {
           </button>
           <div v-if="isPrintMenuOpen" class="print-menu" role="dialog" aria-label="In gia phả" @keydown.esc="isPrintMenuOpen = false">
             <p class="print-menu-title">1. Chọn người cần in</p>
+            <label class="print-scope" :class="{ 'is-disabled': !lineageKey }">
+              <input v-model="printScopeMode" type="radio" value="lineage" :disabled="!lineageKey" />
+              <span v-if="lineageKey">Dòng trực hệ đã chọn <small>({{ lineageLabel }})</small></span>
+              <span v-else>Dòng trực hệ đã chọn <small>(chưa chọn — nhấn "Chọn" trên thẻ một người)</small></span>
+            </label>
             <label class="print-scope">
               <input v-model="printScopeMode" type="radio" value="all" />
               <span>Toàn bộ gia phả</span>
@@ -1611,7 +1738,7 @@ onBeforeUnmount(() => {
             </button>
             <button type="button" class="print-option" :disabled="!canPrint" @click="printAs('tree')">
               <strong>🌳 Sơ đồ cây</strong>
-              <span>Mở rộng toàn bộ nhánh đã chọn · A4 ngang</span>
+              <span>Toàn bộ cây con của người đã chọn, mở rộng hết · A4 ngang</span>
             </button>
           </div>
         </div>
@@ -1629,12 +1756,16 @@ onBeforeUnmount(() => {
 
     <p v-if="fullViewError" class="full-view-error">{{ fullViewError }}</p>
 
-    <div v-if="selectedUnitKey" class="detail-toolbar">
-      <p>
+    <div v-if="selectedUnitKey || lineageKey" class="detail-toolbar">
+      <p v-if="lineageKey">
+        Đang xem dòng trực hệ của:
+        <strong>{{ lineageLabel }}</strong>
+      </p>
+      <p v-else>
         Đang xem chi tiết nhánh của:
         <strong>{{ selectedRootLabel }}</strong>
       </p>
-      <button type="button" @click="clearFocusedTree">Xem toàn bộ cây</button>
+      <button type="button" @click="clearFocusedTree">{{ lineageKey ? 'Bỏ chọn' : 'Xem toàn bộ cây' }}</button>
     </div>
 
     <div ref="canvasRef" class="tree-canvas" :style="{ zoom }">
@@ -1648,7 +1779,7 @@ onBeforeUnmount(() => {
       <ul class="tree-root">
         <FamilyTreeNode
           v-for="unit in selectedRootUnits"
-          :key="`${selectedUnitKey ?? 'all'}:${unit.key}`"
+          :key="`${lineageKey ? `line-${lineageKey}` : selectedUnitKey ?? 'all'}:${unit.key}`"
           :unit="unit"
           :child-units-by-unit-key="childUnitsByUnitKey"
           :child-units-resolver="resolveChildUnits"
@@ -1989,6 +2120,11 @@ onBeforeUnmount(() => {
   padding: 0.2rem 0.3rem;
   color: #4a2e14;
   cursor: pointer;
+}
+
+.print-scope.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .print-person {
