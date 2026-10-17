@@ -128,8 +128,11 @@ const inLawSide = (child: FamilyMember): string => (child.gender === 'male' ? 'B
 
 // In a couple, the spouse whose own parents are in the tree is drawn under those parents (see inLawGuests of
 // the parent row), not next to their partner. This node then shows only the partner.
+// A top node (depth 0, e.g. the parent row in "Xem chi tiết") has no parent row above it, so both stay together.
 const displacedSpouse = computed(() =>
-  hasCouple.value ? members.value.find((member) => props.inLawParentsResolver?.(member.id)) : undefined,
+  hasCouple.value && props.depth > 0
+    ? members.value.find((member) => props.inLawParentsResolver?.(member.id))
+    : undefined,
 )
 const soloMember = computed(() =>
   displacedSpouse.value ? members.value.find((member) => member.id !== displacedSpouse.value?.id) ?? members.value[0] : members.value[0],
