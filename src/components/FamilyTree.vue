@@ -4,6 +4,8 @@ import AnniversaryBar from './AnniversaryBar.vue'
 import FamilyTreeNode from './FamilyTreeNode.vue'
 import type { FamilyMember, FamilyUnit } from '../types/family'
 import type { LunarEvent } from '../utils/lunar-events'
+import { honorific, isDeceased, memorialPlaceLabel } from '../utils/memorial'
+import { solarDateTextToLunarText } from '../utils/lunar'
 
 const props = withDefaults(
   defineProps<{
@@ -37,6 +39,27 @@ const emit = defineEmits<{
 
 const selectedUnitKey = ref<string | null>(null)
 const treeWrapperRef = ref<HTMLElement | null>(null)
+
+/* Height of the notification bar, so the sticky controls sit below it in Full view */
+const anniversaryHeight = ref(0)
+let anniversaryObserver: ResizeObserver | undefined
+const setAnniversaryEl = (component: unknown) => {
+  anniversaryObserver?.disconnect()
+  anniversaryObserver = undefined
+  const el = (component as { $el?: Element } | null)?.$el
+  if (!(el instanceof HTMLElement)) {
+    anniversaryHeight.value = 0
+    return
+  }
+  const measure = () => {
+    anniversaryHeight.value = el.offsetHeight
+  }
+  measure()
+  if (typeof ResizeObserver !== 'undefined') {
+    anniversaryObserver = new ResizeObserver(measure)
+    anniversaryObserver.observe(el)
+  }
+}
 const isFullView = ref(false)
 // iPhone Safari has no Fullscreen API for normal elements: fall back to a fixed overlay.
 const isPseudoFullView = ref(false)
@@ -319,6 +342,39 @@ const rootUnits = computed(() => {
   }
 
   return rootUnitList.sort(compareUnitsLeftToRight)
+})
+
+/**
+ * Totals for the stats strip. Counts the people currently drawn: the whole tree,
+ * or only the focused branch while "Xem chi tiết" is active.
+ */
+const treeStats = computed(() => {
+  const shown = new Map<string, FamilyMember>()
+  const addMember = (member: FamilyMember) => {
+    shown.set(member.id, member)
+    for (const ex of getFormerSpouses(member.id)) shown.set(ex.id, ex)
+    for (const parent of getInLawParents(member.id)?.members ?? []) shown.set(parent.id, parent)
+  }
+
+  let generations = 0
+  const seen = new Set<string>()
+  const walk = (unit: FamilyUnit, depth: number) => {
+    if (seen.has(unit.key)) return
+    seen.add(unit.key)
+    generations = Math.max(generations, depth)
+    unit.members.forEach(addMember)
+    for (const child of resolveChildUnits(unit.key)) {
+      walk(child, depth + 1)
+    }
+  }
+  for (const unit of selectedRootUnits.value) {
+    walk(unit, 1)
+  }
+
+  // Whole tree: count every member, even ones not reachable from a root
+  const counted = selectedUnitKey.value ? [...shown.values()] : props.members
+  const living = counted.filter((member) => !isDeceased(member)).length
+  return { total: counted.length, living, generations }
 })
 
 const getInLawParents = (memberId: string): FamilyUnit | undefined => unitParentLinks.value.inLawByMemberId.get(memberId)
@@ -873,6 +929,126 @@ const onEditMember = async (id: string): Promise<void> => {
   emit('editMember', id)
 }
 
+/* ---- Print: a plain-text list, top down, each generation indented ---- */
+const isPrinting = ref(false)
+
+const escapeHtml = (value: string): string =>
+  value.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] ?? ch)
+
+const formatPrintDate = (value?: string): string => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`
+}
+
+const describeForPrint = (member: FamilyMember): string => {
+  if (member.isHidden && !props.canManage) {
+    return '<b>Đã ẩn thông tin</b>'
+  }
+
+  const details: string[] = []
+  if (props.showBirthDate && member.birthDate) details.push(`Ngày sinh: ${formatPrintDate(member.birthDate)}`)
+  if (props.showDeathDate && member.deathDate) details.push(`Ngày mất: ${formatPrintDate(member.deathDate)}`)
+  const lunar = member.deathDateLunar?.trim() || solarDateTextToLunarText(member.deathDate)
+  if (props.showDeathDate && lunar) details.push(`Ngày mất (âm lịch): ${lunar}`)
+  const place = props.showMemorialPlace ? memorialPlaceLabel(member, getMemberById) : ''
+  if (place) details.push(`Nơi giỗ: ${place}`)
+
+  const name = `<b>${escapeHtml(member.name)}</b>`
+  return details.length ? `${name} <span class="details">— ${escapeHtml(details.join(' · '))}</span>` : name
+}
+
+const buildPrintHtml = (): string => {
+  const lines: string[] = []
+  const seen = new Set<string>()
+
+  const walk = (unit: FamilyUnit, generation: number) => {
+    if (seen.has(unit.key)) return
+    seen.add(unit.key)
+
+    const owner =
+      unitParentLinks.value.primary.get(unit.key)?.owner ??
+      unit.members.find((member) => member.gender === 'male') ??
+      unit.members[0]
+    const partners = unit.members.filter((member) => member.id !== owner.id)
+    const partnerLabel = (partner: FamilyMember) =>
+      partner.gender === 'female' ? 'Vợ' : partner.gender === 'male' ? 'Chồng' : 'Vợ/Chồng'
+
+    const rows = [`<div class="row"><span class="gen">Đời ${generation}</span>${describeForPrint(owner)}</div>`]
+    for (const partner of partners) {
+      const parents = getInLawParents(partner.id)?.members ?? []
+      const from = parents.length
+        ? ` <span class="details">(con của ${escapeHtml(parents.map((p) => `${honorific(p)}${p.name}`).join(' & '))})</span>`
+        : ''
+      rows.push(`<div class="row sub">${partnerLabel(partner)}: ${describeForPrint(partner)}${from}</div>`)
+    }
+    for (const host of unit.members) {
+      for (const ex of getFormerSpouses(host.id)) {
+        rows.push(`<div class="row sub">${partnerLabel(ex)} trước (đã ly hôn): ${describeForPrint(ex)}</div>`)
+      }
+    }
+
+    lines.push(`<section class="unit" style="margin-left:${(generation - 1) * 2.2}em">${rows.join('')}</section>`)
+
+    for (const child of resolveChildUnits(unit.key)) {
+      walk(child, generation + 1)
+    }
+  }
+
+  for (const unit of selectedRootUnits.value) {
+    walk(unit, 1)
+  }
+
+  const branch = selectedRootLabel.value ? `<p class="branch">Nhánh: ${escapeHtml(selectedRootLabel.value)}</p>` : ''
+  return `<h1>${escapeHtml(document.title)}</h1>${branch}${lines.join('\n')}`
+}
+
+const printTree = (): void => {
+  if (isPrinting.value) return
+  isPrinting.value = true
+
+  const frame = document.createElement('iframe')
+  frame.setAttribute('aria-hidden', 'true')
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'
+  document.body.appendChild(frame)
+
+  const doc = frame.contentDocument
+  const win = frame.contentWindow
+  if (!doc || !win) {
+    frame.remove()
+    isPrinting.value = false
+    return
+  }
+
+  doc.open()
+  doc.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${escapeHtml(document.title)}</title>
+<style>
+  @page { size: A4 portrait; margin: 15mm 14mm; }
+  body { margin: 0; color: #000; background: #fff; font: 11pt/1.45 'Noto Serif', 'Times New Roman', serif; }
+  h1 { font-size: 15pt; text-align: center; margin: 0 0 4pt; }
+  .branch { text-align: center; margin: 0 0 10pt; }
+  .unit { margin-top: 9pt; break-inside: avoid; page-break-inside: avoid; }
+  .row { margin: 1pt 0; }
+  .row.sub { padding-left: 4.2em; }
+  .gen { display: inline-block; width: 4.2em; font-weight: 600; }
+  .details { font-weight: normal; }
+</style></head><body>${buildPrintHtml()}</body></html>`)
+  doc.close()
+
+  const done = () => {
+    setTimeout(() => frame.remove(), 500)
+    isPrinting.value = false
+  }
+  win.addEventListener('afterprint', done, { once: true })
+  setTimeout(() => {
+    win.focus()
+    win.print()
+    // Some browsers never fire afterprint
+    setTimeout(() => isPrinting.value && done(), 2000)
+  }, 100)
+}
+
 const toggleFullView = async (): Promise<void> => {
   const wrapper = treeWrapperRef.value
   if (!wrapper) {
@@ -959,6 +1135,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', syncFullViewState)
   canvasResizeObserver?.disconnect()
+  anniversaryObserver?.disconnect()
   window.removeEventListener('resize', scheduleInLawLinks)
   window.removeEventListener('load', scheduleInLawLinks)
   canvasMutationObserver?.disconnect()
@@ -975,9 +1152,11 @@ onBeforeUnmount(() => {
     ref="treeWrapperRef"
     class="tree-wrapper"
     :class="{ 'full-view-active': isFullView, 'pseudo-full-view': isPseudoFullView }"
+    :style="{ '--anniv-h': `${anniversaryHeight}px` }"
   >
     <AnniversaryBar
       v-if="notificationMonths > 0"
+      :ref="setAnniversaryEl"
       class="tree-anniversary"
       :members="members"
       :include-hidden="canManage"
@@ -986,6 +1165,21 @@ onBeforeUnmount(() => {
       :show-memorial-place="showMemorialPlace"
       @select="goToMember"
     />
+
+    <dl v-if="members.length" class="tree-stats" aria-label="Thống kê gia phả">
+      <div class="stat">
+        <dt>Tổng số thành viên</dt>
+        <dd>{{ treeStats.total }}</dd>
+      </div>
+      <div class="stat stat--living">
+        <dt>Còn sống</dt>
+        <dd>{{ treeStats.living }}</dd>
+      </div>
+      <div class="stat">
+        <dt>Số đời</dt>
+        <dd>{{ treeStats.generations }}</dd>
+      </div>
+    </dl>
 
     <div class="view-controls">
       <div v-if="isSearchOpen" class="search-box">
@@ -1036,6 +1230,16 @@ onBeforeUnmount(() => {
         >
           <span class="btn-icon" aria-hidden="true">{{ isSearchOpen ? '✕' : '🔍' }}</span>
           <span class="btn-label">{{ isSearchOpen ? 'Đóng tìm kiếm' : 'Tìm kiếm' }}</span>
+        </button>
+        <button
+          type="button"
+          class="full-view-btn print-btn"
+          title="In danh sách gia phả (chỉ chữ)"
+          :disabled="isPrinting"
+          @click="printTree"
+        >
+          <span class="btn-icon" aria-hidden="true">🖨</span>
+          <span class="btn-label">In</span>
         </button>
         <button
           type="button"
@@ -1312,7 +1516,13 @@ onBeforeUnmount(() => {
 }
 
 .detail-toolbar {
+  /* stay in view while the tree is scrolled sideways (like the controls above) */
+  position: sticky;
+  left: 0;
+  z-index: 8;
+  box-sizing: border-box;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
@@ -1325,6 +1535,8 @@ onBeforeUnmount(() => {
 
 .detail-toolbar p {
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: #5f3a1a;
 }
 
@@ -1348,7 +1560,8 @@ onBeforeUnmount(() => {
 }
 
 .full-view-active .view-controls {
-  top: 0;
+  /* sit just under the sticky notification bar instead of covering it */
+  top: var(--anniv-h, 0px);
   padding: 0.5rem 0;
   background: rgba(255, 248, 234, 0.92);
 }
@@ -1461,6 +1674,55 @@ onBeforeUnmount(() => {
   max-width: none;
 }
 
+/* Totals strip */
+.tree-stats {
+  position: sticky;
+  left: 0;
+  z-index: 9;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem;
+  margin: 0 0 0.8rem;
+  padding: 0;
+}
+
+.tree-stats .stat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid #c9a24a;
+  border-radius: 999px;
+  background: #fffaf0;
+  color: #5a3414;
+  white-space: nowrap;
+}
+
+.tree-stats dt {
+  font-size: 0.85rem;
+}
+
+.tree-stats dd {
+  margin: 0;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #8b1d12;
+}
+
+.tree-stats .stat--living dd {
+  color: #2f6b2f;
+}
+
+.tree-stats .stat--deceased dd {
+  color: #6b6458;
+}
+
+.full-view-active .tree-stats {
+  display: none;
+}
+
 /* ---------- Mobile ---------- */
 @media (max-width: 640px) {
   .tree-wrapper {
@@ -1493,6 +1755,24 @@ onBeforeUnmount(() => {
 
   .view-controls {
     gap: 0.45rem;
+  }
+
+  .tree-stats {
+    gap: 0.3rem;
+    margin-bottom: 0.55rem;
+  }
+
+  .tree-stats .stat {
+    padding: 0.15rem 0.5rem;
+    gap: 0.3rem;
+  }
+
+  .tree-stats dt {
+    font-size: 0.72rem;
+  }
+
+  .tree-stats dd {
+    font-size: 0.85rem;
   }
 
   .control-buttons {
