@@ -188,13 +188,22 @@ const formerSpouseLinks = computed(() => {
     }
     seenPairs.add(pairKey)
 
+    // Who keeps the row (host) and who is drawn beside them as the former spouse (ex):
+    // 1. the one born into the family (parents in the tree);
+    // 2. otherwise the one who remarried (so A–ly hôn–B sits next to A's new couple A–C);
+    // 3. otherwise the husband. The order the divorce was entered in (on A or on B) doesn't matter.
     const memberBlood = hasParentsInTree(member)
     const otherBlood = hasParentsInTree(other)
+    const memberMarried = isInMutualPair(member)
+    const otherMarried = isInMutualPair(other)
     let host = member
     let ex = other
     if (memberBlood !== otherBlood) {
       host = memberBlood ? member : other
       ex = memberBlood ? other : member
+    } else if (memberMarried !== otherMarried) {
+      host = memberMarried ? member : other
+      ex = memberMarried ? other : member
     } else if (other.gender === 'male' && member.gender !== 'male') {
       host = other
       ex = member
