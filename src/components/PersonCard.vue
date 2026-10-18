@@ -59,6 +59,13 @@ const genderClass = computed(() => {
 
 const isContentHidden = computed(() => Boolean(props.member.isHidden))
 
+// Contributor ("Người đóng góp") may only manage members not approved yet; App decides per member.
+const canManageMember = inject<((id: string) => boolean) | undefined>('canManageMember', undefined)
+const canManageThis = computed(() => props.canManage && (!canManageMember || canManageMember(props.member.id)))
+// "Mới": added but not approved by the super admin yet (shown on the management pages only)
+const isNewMember = inject<((id: string) => boolean) | undefined>('isNewMember', undefined)
+const showNewBadge = computed(() => props.canManage && Boolean(isNewMember?.(props.member.id)))
+
 // Every spouse's name (several spouses → "A, B")
 const spouseNames = computed(() => {
   const names = spouseIdsOf(props.member)
@@ -118,6 +125,7 @@ const formatDate = (value?: string): string => {
     :class="[`person-card--${genderClass}`, { 'person-card--highlighted': highlighted, 'person-card--deceased': isDeceased }]"
     :data-member-id="member.id"
   >
+    <span v-if="showNewBadge" class="new-badge" title="Thành viên mới, chưa được duyệt">Mới</span>
     <template v-if="isContentHidden">
       <h3>Đã ẩn thông tin</h3>
     </template>
@@ -159,7 +167,7 @@ const formatDate = (value?: string): string => {
 
     <div class="actions">
       <button
-        v-if="canManage"
+        v-if="canManageThis"
         type="button"
         class="visibility"
         @click="$emit('toggleHidden', member.id)"
@@ -203,7 +211,7 @@ const formatDate = (value?: string): string => {
           {{ isDefault ? '★' : '☆' }}
         </button>
 
-        <template v-if="canManage">
+        <template v-if="canManageThis">
           <button type="button" class="edit" @click="$emit('edit', member.id)">
             Sửa
           </button>
@@ -231,6 +239,7 @@ const formatDate = (value?: string): string => {
 }
 
 .person-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: #ffffff;
@@ -248,6 +257,21 @@ const formatDate = (value?: string): string => {
 .person-card--male {
   background: #f7fbff;
   border-color: #bcd6f4;
+}
+
+/* top-left corner tag on members not approved yet */
+.new-badge {
+  position: absolute;
+  top: -0.55rem;
+  left: 0.7rem;
+  padding: 0.05rem 0.5rem;
+  border: 1px solid #c98a1b;
+  border-radius: 999px;
+  background: #fff1d6;
+  color: #8a4b00;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
 }
 
 .person-card--female {

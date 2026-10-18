@@ -1,6 +1,8 @@
 // Secret paths for the management pages (the old /admin and /super-admin no longer work).
 export const ADMIN_PATH = '/Nwd4aJiepNwDiD9BmRNrHnbYVqcGqqoy'
 export const SUPER_ADMIN_PATH = '/4aZcqAoC4LbKsWVf7RTFTvtKZeeUy2CB'
+// Người đóng góp: may only add members and edit/delete members not approved yet.
+export const CONTRIBUTOR_PATH = '/dnWEtJQ0HipYD8yYzd3p15E7V36r9dxs'
 
 // Key the super admin must type to download the JSON file.
 // Only the server code (worker/ and vite.config.ts) imports this, so it is not included in the

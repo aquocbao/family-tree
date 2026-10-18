@@ -28,8 +28,9 @@ Each one has its own member/settings validation and its own settings defaults. W
 
 The database holds two copies: `members`/`settings` (approved, shown publicly) and `pendingMembers`/`pendingSettings`/`pendingUpdatedAt` (drafts).
 
-- Routes (`src/router.ts`): `/` is public and shows approved data only (old `/view` links and unknown paths redirect there). `ADMIN_PATH` and `SUPER_ADMIN_PATH` are secret URLs defined in `src/admin-paths.ts`. All three routes render the same `App.vue`, which works out a `mode` from `route.name`.
+- Routes (`src/router.ts`): `/` is public and shows approved data only (old `/view` links and unknown paths redirect there). `ADMIN_PATH`, `SUPER_ADMIN_PATH` and `CONTRIBUTOR_PATH` are secret URLs defined in `src/admin-paths.ts`. All routes render the same `App.vue`, which works out a `mode` from `route.name`.
 - Admin edits write only the pending copy, and the PUT needs no password.
+- Contributor mode ("Người đóng góp") is a restricted admin: it can add members and edit, hide or delete only *new* members (in pending but not in the approved data, shown with a "Mới" tag), and it cannot change settings, Lễ Tết or Lời ngỏ. This is enforced in `App.vue` (`canManageMember`, provided to `PersonCard`), not on the server.
 - In super-admin mode you can approve (pending → approved), reject (discard pending), or download the JSON. The server compares stored data to incoming data with a canonical JSON comparison. Any change to approved data, or dropping pending, requires the `X-Approve-Password` header (`APPROVE_KEY`, or the `APPROVE_PASSWORD` secret). Export requires `X-Download-Password` (`DOWNLOAD_KEY`, or the `DOWNLOAD_PASSWORD` secret/env).
 - `src/admin-paths.ts` holds the keys. Only server code (`worker/`, `vite.config.ts`) may import `APPROVE_KEY`/`DOWNLOAD_KEY`. Never import them from `src/` client code, or they end up in the browser bundle.
 

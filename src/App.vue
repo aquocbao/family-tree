@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ADMIN_PATH, SUPER_ADMIN_PATH } from './admin-paths'
+import { ADMIN_PATH, CONTRIBUTOR_PATH, SUPER_ADMIN_PATH } from './admin-paths'
 import FamilyTree from './components/FamilyTree.vue'
 import SearchableMemberSelect from './components/SearchableMemberSelect.vue'
 import GateDoor from './components/GateDoor.vue'
@@ -56,7 +56,8 @@ type MemberForm = {
   deceased: boolean
 }
 
-type AppMode = 'view' | 'admin' | 'super-admin'
+/** contributor ("Người đóng góp"): may only add members and edit/delete members not approved yet */
+type AppMode = 'view' | 'admin' | 'super-admin' | 'contributor'
 
 const approvedMembers = ref<FamilyMember[]>([])
 const pendingMembers = ref<FamilyMember[] | null>(null)
@@ -295,11 +296,29 @@ const mode = computed<AppMode>(() => {
     return 'super-admin'
   }
 
+  if (route.name === 'contributor') {
+    return 'contributor'
+  }
+
   return 'view'
 })
 
 const isSuperAdminMode = computed(() => mode.value === 'super-admin')
-const isEditableMode = computed(() => mode.value === 'admin' || mode.value === 'super-admin')
+const isContributorMode = computed(() => mode.value === 'contributor')
+// Every management page: edits go to the pending copy
+const isEditableMode = computed(() => mode.value === 'admin' || mode.value === 'super-admin' || isContributorMode.value)
+// Cài đặt, Lễ Tết, Lời ngỏ: admin and super admin only
+const canEditSettings = computed(() => mode.value === 'admin' || mode.value === 'super-admin')
+
+// "New" member = in the pending copy but not in the approved data yet (added, waiting for the super admin).
+const approvedMemberIds = computed(() => new Set(approvedMembers.value.map((member) => member.id)))
+const isNewMember = (id: string): boolean => !approvedMemberIds.value.has(id)
+// Contributor: only new members. Admin / super admin: everyone.
+const canManageMember = (id: string): boolean => isEditableMode.value && (!isContributorMode.value || isNewMember(id))
+const CONTRIBUTOR_DENIED = 'Người đóng góp chỉ được sửa/xóa thành viên mới (chưa được duyệt).'
+// PersonCard reads these to show Sửa/Xóa/Ẩn and the "Mới" tag per member
+provide('canManageMember', canManageMember)
+provide('isNewMember', (id: string) => isEditableMode.value && isNewMember(id))
 const hasPendingChanges = computed(() => pendingMembers.value !== null)
 
 const members = computed<FamilyMember[]>(() => {
@@ -455,6 +474,10 @@ const startEditMember = (id: string): void => {
 
   const member = members.value.find((item) => item.id === id)
   if (!member) {
+    return
+  }
+  if (!canManageMember(member.id)) {
+    formError.value = CONTRIBUTOR_DENIED
     return
   }
 
@@ -747,6 +770,11 @@ const saveMember = async (): Promise<void> => {
     return
   }
 
+  if (isEditing.value && editingId.value && !canManageMember(editingId.value)) {
+    formError.value = CONTRIBUTOR_DENIED
+    return
+  }
+
   if (!validateForm()) {
     return
   }
@@ -852,6 +880,10 @@ const toggleMemberHidden = async (id: string): Promise<void> => {
   if (!target) {
     return
   }
+  if (!canManageMember(id)) {
+    formError.value = CONTRIBUTOR_DENIED
+    return
+  }
 
   const nextMembers = members.value.map((member) => {
     if (member.id !== id) {
@@ -872,6 +904,10 @@ const toggleMemberHidden = async (id: string): Promise<void> => {
 
 const deleteMember = async (id: string): Promise<void> => {
   if (!isEditableMode.value) {
+    return
+  }
+  if (!canManageMember(id)) {
+    formError.value = CONTRIBUTOR_DENIED
     return
   }
 
@@ -1017,7 +1053,13 @@ const setMode = (nextMode: AppMode): void => {
   }
 
   const nextPath =
-    nextMode === 'admin' ? ADMIN_PATH : nextMode === 'super-admin' ? SUPER_ADMIN_PATH : '/'
+    nextMode === 'admin'
+      ? ADMIN_PATH
+      : nextMode === 'super-admin'
+        ? SUPER_ADMIN_PATH
+        : nextMode === 'contributor'
+          ? CONTRIBUTOR_PATH
+          : '/'
   void router.push(nextPath)
 }
 
@@ -1042,7 +1084,7 @@ watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notif
   if (
     suppressSettingsSync.value ||
     !hasLoadedDatabase.value ||
-    !isEditableMode.value ||
+    !canEditSettings.value ||
     (
       nextBirthDate === previousBirthDate &&
       nextDeathDate === previousDeathDate &&
@@ -1181,6 +1223,7 @@ const restoreDefaultLunarEvents = (): void => {
 }
 
 const saveLunarEvents = (): void => {
+  if (!canEditSettings.value) return
   lunarEventsMessage.value = ''
   const next: LunarEvent[] = lunarEventsDraft.value.map((e) => {
     const lastDay = e.calendar === 'lunar' && e.lastDayOfMonth
@@ -1242,6 +1285,7 @@ const restoreDefaultLoiNgo = (): void => {
 }
 
 const saveLoiNgo = async (): Promise<void> => {
+  if (!canEditSettings.value) return
   loiNgoMessage.value = ''
   const next = loiNgoFromDraft(loiNgoDraft.value)
   if (!isValidLoiNgo(next)) {
@@ -1304,11 +1348,19 @@ onMounted(async () => {
           Chế độ xem
         </button>
         <button
+          v-if="!isContributorMode"
           type="button"
           :class="{ active: mode === 'admin' }"
           @click="setMode('admin')"
         >
           Chế độ quản trị
+        </button>
+        <button
+          v-if="isContributorMode"
+          type="button"
+          class="active"
+        >
+          Người đóng góp
         </button>
         <button
           v-if="isSuperAdminMode"
@@ -1323,11 +1375,18 @@ onMounted(async () => {
         {{
           isSuperAdminMode
             ? 'Super admin: review, chỉnh sửa và phê duyệt thay đổi.'
-            : 'Admin: thay đổi sẽ vào bản chờ duyệt, chưa hiển thị ở chế độ xem.'
+            : isContributorMode
+              ? 'Người đóng góp: chỉ thêm thành viên mới, và sửa/xóa những thành viên chưa được duyệt (có nhãn "Mới"). Thay đổi vào bản chờ duyệt.'
+              : 'Admin: thay đổi sẽ vào bản chờ duyệt, chưa hiển thị ở chế độ xem.'
         }}
       </p>
       <p class="mode-url">
-        Đường dẫn: <code>{{ mode === 'super-admin' ? SUPER_ADMIN_PATH : ADMIN_PATH }}</code>
+        Đường dẫn:
+        <code>{{ mode === 'super-admin' ? SUPER_ADMIN_PATH : mode === 'contributor' ? CONTRIBUTOR_PATH : ADMIN_PATH }}</code>
+      </p>
+      <!-- the super admin hands this link to people who may only add new members -->
+      <p v-if="isSuperAdminMode" class="mode-url">
+        Đường dẫn cho người đóng góp: <code>{{ CONTRIBUTOR_PATH }}</code>
       </p>
       <div v-if="isSuperAdminMode" class="download-row">
         <button v-if="!isDownloadPromptOpen" type="button" class="download-btn" @click="openDownloadPrompt">
@@ -1404,7 +1463,202 @@ onMounted(async () => {
       </template>
     </section>
 
-    <div v-if="isEditableMode" class="admin-panels">
+    <div v-if="canEditSettings" class="admin-panels">
+      <section class="settings-panel">
+        <header class="panel-head">
+          <div>
+            <h2>Cài đặt hiển thị</h2>
+            <p class="panel-sub">Lưu ngay khi thay đổi (vào bản chờ duyệt).</p>
+          </div>
+        </header>
+
+        <div class="switch-list">
+          <label class="switch-row">
+            <span>Ngày sinh</span>
+            <input v-model="showBirthDate" type="checkbox" class="switch" />
+          </label>
+          <label class="switch-row">
+            <span>Ngày mất</span>
+            <input v-model="showDeathDate" type="checkbox" class="switch" />
+          </label>
+          <label class="switch-row">
+            <span>Vợ/chồng</span>
+            <input v-model="showSpouseInfo" type="checkbox" class="switch" />
+          </label>
+          <label class="switch-row">
+            <span>Nút "Xem chi tiết"</span>
+            <input v-model="showViewDetailAction" type="checkbox" class="switch" />
+          </label>
+          <label class="switch-row">
+            <span>Nơi tổ chức đám giỗ</span>
+            <input v-model="showMemorialPlace" type="checkbox" class="switch" />
+          </label>
+        </div>
+
+        <label class="setting-select">
+          <span class="field-label">Thanh thông báo (ngày giỗ, Lễ Tết)</span>
+          <select v-model.number="notificationMonths">
+            <option :value="0">Tắt</option>
+            <option :value="1">Hiện sự kiện trong 1 tháng tới</option>
+            <option :value="2">Hiện sự kiện trong 2 tháng tới</option>
+            <option :value="3">Hiện sự kiện trong 3 tháng tới</option>
+            <option :value="4">Hiện sự kiện trong 4 tháng tới</option>
+            <option :value="6">Hiện sự kiện trong 6 tháng tới</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="events-panel">
+        <header class="panel-head">
+          <div>
+            <h2>
+              Lễ Tết trên thanh thông báo
+              <span v-if="lunarEventsDirty" class="dirty-badge">Chưa lưu</span>
+            </h2>
+            <p class="panel-sub">
+              {{ lunarEventsDraft.length }} sự kiện. "Cuối tháng" = ngày cuối tháng âm lịch (29 hoặc 30), ví dụ Giao thừa.
+            </p>
+          </div>
+        </header>
+
+        <div class="events-table" role="table" aria-label="Danh sách Lễ Tết">
+          <div class="events-head" role="row">
+            <span role="columnheader">Tên sự kiện</span>
+            <span role="columnheader">Lịch</span>
+            <span role="columnheader">Ngày</span>
+            <span role="columnheader">Tháng</span>
+            <span role="columnheader">Cuối tháng</span>
+            <span role="columnheader">Lần tới</span>
+            <span role="columnheader"><span class="sr-only">Xóa</span></span>
+          </div>
+          <div
+            v-for="(event, index) in lunarEventsDraft"
+            :key="index"
+            class="event-row"
+            :class="`is-${event.calendar}`"
+            role="row"
+          >
+            <input
+              v-model="event.name"
+              type="text"
+              class="event-name"
+              :maxlength="MAX_LUNAR_EVENT_NAME"
+              placeholder="Tên sự kiện"
+              aria-label="Tên sự kiện"
+            />
+            <div class="segmented segmented--sm" role="radiogroup" aria-label="Loại lịch">
+              <label :class="{ 'is-on': event.calendar === 'lunar' }">
+                <input v-model="event.calendar" type="radio" :name="`event-cal-${index}`" value="lunar" />Âm
+              </label>
+              <label :class="{ 'is-on': event.calendar === 'solar' }">
+                <input v-model="event.calendar" type="radio" :name="`event-cal-${index}`" value="solar" />Dương
+              </label>
+            </div>
+            <input
+              v-model.number="event.day"
+              type="number"
+              class="event-num event-day"
+              min="1"
+              :max="event.calendar === 'solar' ? 31 : 30"
+              :disabled="event.calendar === 'lunar' && event.lastDayOfMonth"
+              :aria-label="event.calendar === 'solar' ? 'Ngày dương lịch' : 'Ngày âm lịch'"
+            />
+            <input
+              v-model.number="event.month"
+              type="number"
+              class="event-num event-month"
+              min="1"
+              max="12"
+              :aria-label="event.calendar === 'solar' ? 'Tháng dương lịch' : 'Tháng âm lịch'"
+            />
+            <label v-if="event.calendar === 'lunar'" class="event-last" title="Ngày cuối tháng âm lịch (29 hoặc 30)">
+              <input v-model="event.lastDayOfMonth" type="checkbox" />
+              <span>Cuối tháng</span>
+            </label>
+            <span v-else class="event-last event-last--none" aria-hidden="true">—</span>
+            <span class="event-next">{{ nextEventDateLabel(event) }}</span>
+            <button
+              type="button"
+              class="icon-btn icon-btn--danger"
+              :aria-label="`Xóa sự kiện ${event.name || index + 1}`"
+              :title="`Xóa sự kiện ${event.name || ''}`"
+              @click="removeLunarEvent(index)"
+            >
+              ✕
+            </button>
+          </div>
+          <p v-if="lunarEventsDraft.length === 0" class="panel-sub">Chưa có sự kiện nào.</p>
+        </div>
+
+        <div class="events-actions">
+          <button type="button" class="dashed-btn" :disabled="lunarEventsDraft.length >= MAX_LUNAR_EVENTS" @click="addLunarEvent">
+            ＋ Thêm sự kiện
+          </button>
+          <button type="button" class="btn btn--ghost" @click="restoreDefaultLunarEvents">Khôi phục mặc định</button>
+          <span class="events-actions-spacer"></span>
+          <button type="button" class="btn" :disabled="!lunarEventsDirty" @click="resetLunarEventsDraft">Hủy thay đổi</button>
+          <button type="button" class="btn btn--primary" :disabled="!lunarEventsDirty || isSaving" @click="saveLunarEvents">
+            Lưu danh sách
+          </button>
+        </div>
+        <p v-if="lunarEventsError" class="form-error" role="alert">{{ lunarEventsError }}</p>
+        <p v-else-if="lunarEventsMessage" class="lunar-events-message">{{ lunarEventsMessage }}</p>
+      </section>
+      <section class="loingo-panel">
+        <header class="panel-head">
+          <div>
+            <h2>
+              Lời ngỏ
+              <span v-if="loiNgoDirty" class="dirty-badge">Chưa lưu</span>
+            </h2>
+            <p class="panel-sub">
+              Hiện ở trang xem (sau khi mở cửa) và phía trên cây gia phả. Mỗi đoạn cách nhau <strong>một dòng trống</strong>.
+            </p>
+          </div>
+        </header>
+
+        <div class="loingo-grid">
+          <label class="field">
+            <span class="field-label">Câu mở đầu <small class="field-hint">(dòng nhỏ dưới tiêu đề "Lời ngỏ")</small></span>
+            <input v-model="loiNgoDraft.teaser" type="text" class="loingo-input" :maxlength="MAX_LOI_NGO_LINE" placeholder="Ví dụ: “Chim có tổ, người có tông”" />
+          </label>
+
+          <label class="field field--full">
+            <span class="field-label">
+              Nội dung
+              <small class="field-hint">{{ loiNgoParagraphCount }} đoạn</small>
+            </span>
+            <textarea v-model="loiNgoDraft.body" class="loingo-body" rows="16" spellcheck="false"></textarea>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Lời chào cuối</span>
+            <input v-model="loiNgoDraft.sign" type="text" class="loingo-input" :maxlength="MAX_LOI_NGO_LINE" placeholder="Ví dụ: Chào thân ái," />
+          </label>
+        </div>
+
+        <div class="events-actions">
+          <button type="button" class="btn btn--ghost" @click="restoreDefaultLoiNgo">Khôi phục mặc định</button>
+          <span class="events-actions-spacer"></span>
+          <button type="button" class="btn" :disabled="!loiNgoDirty" @click="resetLoiNgoDraft">Hủy thay đổi</button>
+          <button type="button" class="btn btn--primary" :disabled="!loiNgoDirty || isSaving" @click="saveLoiNgo">
+            Lưu lời ngỏ
+          </button>
+        </div>
+        <p v-if="loiNgoError" class="form-error" role="alert">{{ loiNgoError }}</p>
+        <p v-else-if="loiNgoMessage" class="lunar-events-message">{{ loiNgoMessage }}</p>
+      </section>
+    </div>
+
+    <p v-if="isLoading" class="status-message">Đang tải dữ liệu từ file JSON...</p>
+    <p v-else-if="loadingError" class="status-message error">{{ loadingError }}</p>
+
+    <!-- View page: the tree sits behind a closed door; click the lock to open it -->
+    <GateDoor :enabled="!isEditableMode" :loi-ngo="loiNgo" @phase="onGatePhase">
+    <!-- Behind the door too: shown (collapsed) once the visitor has gone in, never over the door or the Lời ngỏ page -->
+    <LoiNgo :content="loiNgo" />
+    <!-- Admin: add/edit member form right above the gia phả, so "Sửa" on a card lands next to the tree -->
+    <div v-if="isEditableMode" class="admin-panels admin-panels--editor">
       <section
         ref="editorPanelRef"
         class="editor-panel"
@@ -1610,200 +1864,7 @@ onMounted(async () => {
           </div>
         </form>
       </section>
-
-      <section class="settings-panel">
-        <header class="panel-head">
-          <div>
-            <h2>Cài đặt hiển thị</h2>
-            <p class="panel-sub">Lưu ngay khi thay đổi (vào bản chờ duyệt).</p>
-          </div>
-        </header>
-
-        <div class="switch-list">
-          <label class="switch-row">
-            <span>Ngày sinh</span>
-            <input v-model="showBirthDate" type="checkbox" class="switch" />
-          </label>
-          <label class="switch-row">
-            <span>Ngày mất</span>
-            <input v-model="showDeathDate" type="checkbox" class="switch" />
-          </label>
-          <label class="switch-row">
-            <span>Vợ/chồng</span>
-            <input v-model="showSpouseInfo" type="checkbox" class="switch" />
-          </label>
-          <label class="switch-row">
-            <span>Nút "Xem chi tiết"</span>
-            <input v-model="showViewDetailAction" type="checkbox" class="switch" />
-          </label>
-          <label class="switch-row">
-            <span>Nơi tổ chức đám giỗ</span>
-            <input v-model="showMemorialPlace" type="checkbox" class="switch" />
-          </label>
-        </div>
-
-        <label class="setting-select">
-          <span class="field-label">Thanh thông báo (ngày giỗ, Lễ Tết)</span>
-          <select v-model.number="notificationMonths">
-            <option :value="0">Tắt</option>
-            <option :value="1">Hiện sự kiện trong 1 tháng tới</option>
-            <option :value="2">Hiện sự kiện trong 2 tháng tới</option>
-            <option :value="3">Hiện sự kiện trong 3 tháng tới</option>
-            <option :value="4">Hiện sự kiện trong 4 tháng tới</option>
-            <option :value="6">Hiện sự kiện trong 6 tháng tới</option>
-          </select>
-        </label>
-      </section>
-
-      <section class="events-panel">
-        <header class="panel-head">
-          <div>
-            <h2>
-              Lễ Tết trên thanh thông báo
-              <span v-if="lunarEventsDirty" class="dirty-badge">Chưa lưu</span>
-            </h2>
-            <p class="panel-sub">
-              {{ lunarEventsDraft.length }} sự kiện. "Cuối tháng" = ngày cuối tháng âm lịch (29 hoặc 30), ví dụ Giao thừa.
-            </p>
-          </div>
-        </header>
-
-        <div class="events-table" role="table" aria-label="Danh sách Lễ Tết">
-          <div class="events-head" role="row">
-            <span role="columnheader">Tên sự kiện</span>
-            <span role="columnheader">Lịch</span>
-            <span role="columnheader">Ngày</span>
-            <span role="columnheader">Tháng</span>
-            <span role="columnheader">Cuối tháng</span>
-            <span role="columnheader">Lần tới</span>
-            <span role="columnheader"><span class="sr-only">Xóa</span></span>
-          </div>
-          <div
-            v-for="(event, index) in lunarEventsDraft"
-            :key="index"
-            class="event-row"
-            :class="`is-${event.calendar}`"
-            role="row"
-          >
-            <input
-              v-model="event.name"
-              type="text"
-              class="event-name"
-              :maxlength="MAX_LUNAR_EVENT_NAME"
-              placeholder="Tên sự kiện"
-              aria-label="Tên sự kiện"
-            />
-            <div class="segmented segmented--sm" role="radiogroup" aria-label="Loại lịch">
-              <label :class="{ 'is-on': event.calendar === 'lunar' }">
-                <input v-model="event.calendar" type="radio" :name="`event-cal-${index}`" value="lunar" />Âm
-              </label>
-              <label :class="{ 'is-on': event.calendar === 'solar' }">
-                <input v-model="event.calendar" type="radio" :name="`event-cal-${index}`" value="solar" />Dương
-              </label>
-            </div>
-            <input
-              v-model.number="event.day"
-              type="number"
-              class="event-num event-day"
-              min="1"
-              :max="event.calendar === 'solar' ? 31 : 30"
-              :disabled="event.calendar === 'lunar' && event.lastDayOfMonth"
-              :aria-label="event.calendar === 'solar' ? 'Ngày dương lịch' : 'Ngày âm lịch'"
-            />
-            <input
-              v-model.number="event.month"
-              type="number"
-              class="event-num event-month"
-              min="1"
-              max="12"
-              :aria-label="event.calendar === 'solar' ? 'Tháng dương lịch' : 'Tháng âm lịch'"
-            />
-            <label v-if="event.calendar === 'lunar'" class="event-last" title="Ngày cuối tháng âm lịch (29 hoặc 30)">
-              <input v-model="event.lastDayOfMonth" type="checkbox" />
-              <span>Cuối tháng</span>
-            </label>
-            <span v-else class="event-last event-last--none" aria-hidden="true">—</span>
-            <span class="event-next">{{ nextEventDateLabel(event) }}</span>
-            <button
-              type="button"
-              class="icon-btn icon-btn--danger"
-              :aria-label="`Xóa sự kiện ${event.name || index + 1}`"
-              :title="`Xóa sự kiện ${event.name || ''}`"
-              @click="removeLunarEvent(index)"
-            >
-              ✕
-            </button>
-          </div>
-          <p v-if="lunarEventsDraft.length === 0" class="panel-sub">Chưa có sự kiện nào.</p>
-        </div>
-
-        <div class="events-actions">
-          <button type="button" class="dashed-btn" :disabled="lunarEventsDraft.length >= MAX_LUNAR_EVENTS" @click="addLunarEvent">
-            ＋ Thêm sự kiện
-          </button>
-          <button type="button" class="btn btn--ghost" @click="restoreDefaultLunarEvents">Khôi phục mặc định</button>
-          <span class="events-actions-spacer"></span>
-          <button type="button" class="btn" :disabled="!lunarEventsDirty" @click="resetLunarEventsDraft">Hủy thay đổi</button>
-          <button type="button" class="btn btn--primary" :disabled="!lunarEventsDirty || isSaving" @click="saveLunarEvents">
-            Lưu danh sách
-          </button>
-        </div>
-        <p v-if="lunarEventsError" class="form-error" role="alert">{{ lunarEventsError }}</p>
-        <p v-else-if="lunarEventsMessage" class="lunar-events-message">{{ lunarEventsMessage }}</p>
-      </section>
-      <section class="loingo-panel">
-        <header class="panel-head">
-          <div>
-            <h2>
-              Lời ngỏ
-              <span v-if="loiNgoDirty" class="dirty-badge">Chưa lưu</span>
-            </h2>
-            <p class="panel-sub">
-              Hiện ở trang xem (sau khi mở cửa) và phía trên cây gia phả. Mỗi đoạn cách nhau <strong>một dòng trống</strong>.
-            </p>
-          </div>
-        </header>
-
-        <div class="loingo-grid">
-          <label class="field">
-            <span class="field-label">Câu mở đầu <small class="field-hint">(dòng nhỏ dưới tiêu đề "Lời ngỏ")</small></span>
-            <input v-model="loiNgoDraft.teaser" type="text" class="loingo-input" :maxlength="MAX_LOI_NGO_LINE" placeholder="Ví dụ: “Chim có tổ, người có tông”" />
-          </label>
-
-          <label class="field field--full">
-            <span class="field-label">
-              Nội dung
-              <small class="field-hint">{{ loiNgoParagraphCount }} đoạn</small>
-            </span>
-            <textarea v-model="loiNgoDraft.body" class="loingo-body" rows="16" spellcheck="false"></textarea>
-          </label>
-
-          <label class="field">
-            <span class="field-label">Lời chào cuối</span>
-            <input v-model="loiNgoDraft.sign" type="text" class="loingo-input" :maxlength="MAX_LOI_NGO_LINE" placeholder="Ví dụ: Chào thân ái," />
-          </label>
-        </div>
-
-        <div class="events-actions">
-          <button type="button" class="btn btn--ghost" @click="restoreDefaultLoiNgo">Khôi phục mặc định</button>
-          <span class="events-actions-spacer"></span>
-          <button type="button" class="btn" :disabled="!loiNgoDirty" @click="resetLoiNgoDraft">Hủy thay đổi</button>
-          <button type="button" class="btn btn--primary" :disabled="!loiNgoDirty || isSaving" @click="saveLoiNgo">
-            Lưu lời ngỏ
-          </button>
-        </div>
-        <p v-if="loiNgoError" class="form-error" role="alert">{{ loiNgoError }}</p>
-        <p v-else-if="loiNgoMessage" class="lunar-events-message">{{ loiNgoMessage }}</p>
-      </section>
     </div>
-
-    <p v-if="isLoading" class="status-message">Đang tải dữ liệu từ file JSON...</p>
-    <p v-else-if="loadingError" class="status-message error">{{ loadingError }}</p>
-
-    <!-- View page: the tree sits behind a closed door; click the lock to open it -->
-    <GateDoor :enabled="!isEditableMode" :loi-ngo="loiNgo" @phase="onGatePhase">
-    <!-- Behind the door too: shown (collapsed) once the visitor has gone in, never over the door or the Lời ngỏ page -->
-    <LoiNgo :content="loiNgo" />
     <FamilyTree
       :members="members"
       :can-manage="isEditableMode"
@@ -2475,9 +2536,16 @@ onMounted(async () => {
   padding: 1.1rem 1.2rem;
 }
 
+.settings-panel,
 .events-panel,
 .loingo-panel {
   grid-column: 1 / -1;
+}
+
+/* the member form sits on its own, right above the gia phả */
+.admin-panels--editor {
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0 0 1.25rem;
 }
 
 .loingo-panel {
@@ -2917,9 +2985,11 @@ onMounted(async () => {
 }
 
 /* -- display settings: switches -- */
+/* full-width panel: switches flow into columns; each one draws its own thin divider */
 .switch-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  background: #fff;
   border: 1px solid #e6e9f1;
   border-radius: 12px;
   overflow: hidden;
@@ -2937,8 +3007,8 @@ onMounted(async () => {
   background: #fff;
 }
 
-.switch-row + .switch-row {
-  border-top: 1px solid #eef0f5;
+.switch-row {
+  outline: 1px solid #eef0f5;
 }
 
 .switch-row:hover {
@@ -2989,6 +3059,7 @@ onMounted(async () => {
   flex-direction: column;
   gap: 0.35rem;
   margin-top: 1rem;
+  max-width: 420px;
 }
 
 /* -- Lễ Tết table: one row per event -- */
