@@ -1154,7 +1154,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="app" :class="{ 'app--welcome': gatePhase === 'welcome' }">
+  <main class="app" :class="{ 'app--welcome': gatePhase === 'welcome', 'app--door': gatePhase === 'door' }">
     <aside class="couplet couplet--left" :title="`Vế trái: ${COUPLET_LEFT.meaning}`" :aria-label="`Câu đối, vế trái: ${COUPLET_LEFT.meaning}`">
       <span v-for="(char, index) in COUPLET_LEFT.chars" :key="index" class="couplet-cell" aria-hidden="true">
         <span class="couplet-char">{{ char }}</span>
@@ -2398,8 +2398,38 @@ onMounted(async () => {
     letter-spacing: 0.12em;
   }
 
-  /* no scrolls on phones, the page gets the full width */
   .couplet {
+    --char-size: 1.45rem;
+    --reading-min: 0.64rem;
+    width: 2.95rem;
+    top: 0.8rem;
+  }
+
+  .couplet::before,
+  .couplet::after {
+    left: -0.3rem;
+    right: -0.3rem;
+    height: 0.4rem;
+  }
+
+  .couplet::before {
+    top: -0.32rem;
+  }
+
+  .couplet::after {
+    bottom: -0.32rem;
+  }
+
+  .couplet--left {
+    left: 0.4rem;
+  }
+
+  .couplet--right {
+    right: 0.4rem;
+  }
+
+  /* phones: scrolls only beside the door; Lời ngỏ and gia phả pages get the full width */
+  .app:not(.app--door) .couplet {
     display: none;
   }
 
@@ -2407,6 +2437,10 @@ onMounted(async () => {
     width: 100%;
     margin: 0.25rem auto 1rem;
     padding: 0.8rem 1.25rem 0.9rem;
+  }
+
+  .app--door .app-header {
+    width: calc(100% - 7.3rem);
   }
 
   .app-header::before,
