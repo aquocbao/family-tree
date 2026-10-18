@@ -4,6 +4,7 @@
 import seedDatabase from '../src/data/family-db.json'
 import { APPROVE_KEY, DOWNLOAD_KEY } from '../src/admin-paths'
 import { DEFAULT_LUNAR_EVENTS, isValidLunarEventList } from '../src/utils/lunar-events'
+import { DEFAULT_LOI_NGO, isValidLoiNgo } from '../src/data/loi-ngo'
 
 interface KVNamespaceLike {
   get(key: string): Promise<string | null>
@@ -65,7 +66,8 @@ const isValidSettings = (value: unknown): boolean => {
   return (
     ['showBirthDate', 'showDeathDate', 'showSpouse', 'showViewDetail', 'showDateInfo', 'showMemorialPlace'].every((k) => isOptionalBool(s[k])) &&
     (months === undefined || (typeof months === 'number' && Number.isInteger(months) && months >= 0 && months <= 12)) &&
-    (s.lunarEvents === undefined || isValidLunarEventList(s.lunarEvents))
+    (s.lunarEvents === undefined || isValidLunarEventList(s.lunarEvents)) &&
+    (s.loiNgo === undefined || isValidLoiNgo(s.loiNgo))
   )
 }
 
@@ -177,6 +179,7 @@ const withDefaultSettings = (value: unknown): Record<string, unknown> => {
     showMemorialPlace: s.showMemorialPlace ?? true,
     notificationMonths: s.notificationMonths ?? 3,
     lunarEvents: s.lunarEvents ?? DEFAULT_LUNAR_EVENTS,
+    loiNgo: s.loiNgo ?? DEFAULT_LOI_NGO,
   }
 }
 

@@ -1,4 +1,5 @@
 import type { LunarEvent } from '../utils/lunar-events'
+import type { LoiNgo } from '../data/loi-ngo'
 
 export type FamilyGender = 'female' | 'male' | 'other'
 
@@ -58,5 +59,7 @@ export interface FamilyTreeSettings {
   notificationMonths?: number
   /** Lễ Tết shown in the notification bar (editable in admin settings). Missing = default list. */
   lunarEvents?: LunarEvent[]
+  /** Lời ngỏ text (editable in admin). Missing = DEFAULT_LOI_NGO. */
+  loiNgo?: LoiNgo
   showDateInfo?: boolean
 }

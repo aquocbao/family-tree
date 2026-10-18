@@ -29,6 +29,15 @@ import {
   type LunarEvent,
 } from './utils/lunar-events'
 import type { FamilyDatabase, FamilyGender, FamilyMember, FamilyTreeSettings } from './types/family'
+import {
+  DEFAULT_LOI_NGO,
+  MAX_LOI_NGO_LINE,
+  MAX_LOI_NGO_PARAGRAPH,
+  MAX_LOI_NGO_PARAGRAPHS,
+  cloneLoiNgo,
+  isValidLoiNgo,
+  type LoiNgo as LoiNgoContent,
+} from './data/loi-ngo'
 
 type MemberForm = {
   id: string
@@ -61,6 +70,7 @@ const defaultTreeSettings = (): FamilyTreeSettings => ({
   showMemorialPlace: true,
   notificationMonths: 3,
   lunarEvents: cloneLunarEvents(DEFAULT_LUNAR_EVENTS),
+  loiNgo: cloneLoiNgo(DEFAULT_LOI_NGO),
 })
 
 const approvedSettings = ref<FamilyTreeSettings>(defaultTreeSettings())
@@ -178,6 +188,8 @@ const showViewDetailAction = ref(true)
 const showMemorialPlace = ref(true)
 const notificationMonths = ref(3)
 const lunarEvents = ref<LunarEvent[]>(cloneLunarEvents(DEFAULT_LUNAR_EVENTS))
+// Lời ngỏ shown in the current mode (approved on the view page, pending in admin); saved with its own button
+const loiNgo = ref<LoiNgoContent>(cloneLoiNgo(DEFAULT_LOI_NGO))
 const hasLoadedDatabase = ref(false)
 const suppressSettingsSync = ref(false)
 // Câu đối ca ngợi đức tổ và gia đạo hưng thịnh (read top → bottom).
@@ -536,6 +548,11 @@ const applyTreeSettings = (settings: FamilyTreeSettings): void => {
     lunarEvents.value = nextEvents
     resetLunarEventsDraft()
   }
+  const nextLoiNgo = cloneLoiNgo(settings.loiNgo ?? DEFAULT_LOI_NGO)
+  if (JSON.stringify(nextLoiNgo) !== JSON.stringify(loiNgo.value)) {
+    loiNgo.value = nextLoiNgo
+    resetLoiNgoDraft()
+  }
 }
 
 const getTreeSettings = (): FamilyTreeSettings => ({
@@ -546,6 +563,7 @@ const getTreeSettings = (): FamilyTreeSettings => ({
   showMemorialPlace: showMemorialPlace.value,
   notificationMonths: notificationMonths.value,
   lunarEvents: cloneLunarEvents(lunarEvents.value),
+  loiNgo: cloneLoiNgo(loiNgo.value),
 })
 
 const applyLoadedState = (database: FamilyDatabase): void => {
@@ -1062,6 +1080,7 @@ watch([showBirthDate, showDeathDate, showSpouseInfo, showViewDetailAction, notif
       showMemorialPlace: nextPlace,
       notificationMonths: nextMonths,
       lunarEvents: cloneLunarEvents(nextEvents),
+      loiNgo: cloneLoiNgo(loiNgo.value),
     },
   )
   if (!saved) {
@@ -1184,6 +1203,62 @@ const saveLunarEvents = (): void => {
   }
   lunarEventsError.value = ''
   lunarEvents.value = next // the settings watcher saves it (pending → super admin approval)
+}
+
+// ---- Lời ngỏ editor (draft; saved with the "Lưu lời ngỏ" button → pending, like the other settings) ----
+// One text box for the body: paragraphs are separated by a blank line.
+type LoiNgoDraft = { teaser: string; body: string; sign: string }
+const toLoiNgoDraft = (value: LoiNgoContent): LoiNgoDraft => ({
+  teaser: value.teaser,
+  body: value.paragraphs.join('\n\n'),
+  sign: value.sign,
+})
+const loiNgoDraft = ref<LoiNgoDraft>(toLoiNgoDraft(DEFAULT_LOI_NGO))
+const loiNgoError = ref('')
+const loiNgoMessage = ref('')
+
+function resetLoiNgoDraft(): void {
+  loiNgoDraft.value = toLoiNgoDraft(loiNgo.value)
+  loiNgoError.value = ''
+}
+
+const loiNgoFromDraft = (draft: LoiNgoDraft): LoiNgoContent => ({
+  teaser: draft.teaser.trim(),
+  paragraphs: draft.body
+    .split(/\n\s*\n/)
+    .map((text) => text.replace(/\s*\n\s*/g, ' ').trim())
+    .filter(Boolean),
+  sign: draft.sign.trim(),
+})
+
+const loiNgoParagraphCount = computed(() => loiNgoFromDraft(loiNgoDraft.value).paragraphs.length)
+const loiNgoDirty = computed(
+  () => JSON.stringify(loiNgoFromDraft(loiNgoDraft.value)) !== JSON.stringify(loiNgo.value),
+)
+
+const restoreDefaultLoiNgo = (): void => {
+  loiNgoMessage.value = ''
+  loiNgoDraft.value = toLoiNgoDraft(DEFAULT_LOI_NGO)
+}
+
+const saveLoiNgo = async (): Promise<void> => {
+  loiNgoMessage.value = ''
+  const next = loiNgoFromDraft(loiNgoDraft.value)
+  if (!isValidLoiNgo(next)) {
+    loiNgoError.value = `Cần ít nhất 1 đoạn (tối đa ${MAX_LOI_NGO_PARAGRAPHS} đoạn, mỗi đoạn tối đa ${MAX_LOI_NGO_PARAGRAPH} ký tự); câu mở đầu và lời chào tối đa ${MAX_LOI_NGO_LINE} ký tự.`
+    return
+  }
+  loiNgoError.value = ''
+  const previous = loiNgo.value
+  loiNgo.value = next
+  const saved = await persistMembers(cloneMembers(members.value), getTreeSettings())
+  if (saved) {
+    loiNgoDraft.value = toLoiNgoDraft(next)
+    loiNgoMessage.value = 'Đã lưu lời ngỏ (vào bản chờ duyệt).'
+  } else {
+    loiNgo.value = previous
+    loiNgoError.value = 'Không lưu được lời ngỏ. Vui lòng thử lại.'
+  }
 }
 
 onMounted(async () => {
@@ -1676,15 +1751,59 @@ onMounted(async () => {
         <p v-if="lunarEventsError" class="form-error" role="alert">{{ lunarEventsError }}</p>
         <p v-else-if="lunarEventsMessage" class="lunar-events-message">{{ lunarEventsMessage }}</p>
       </section>
+      <section class="loingo-panel">
+        <header class="panel-head">
+          <div>
+            <h2>
+              Lời ngỏ
+              <span v-if="loiNgoDirty" class="dirty-badge">Chưa lưu</span>
+            </h2>
+            <p class="panel-sub">
+              Hiện ở trang xem (sau khi mở cửa) và phía trên cây gia phả. Mỗi đoạn cách nhau <strong>một dòng trống</strong>.
+            </p>
+          </div>
+        </header>
+
+        <div class="loingo-grid">
+          <label class="field">
+            <span class="field-label">Câu mở đầu <small class="field-hint">(dòng nhỏ dưới tiêu đề "Lời ngỏ")</small></span>
+            <input v-model="loiNgoDraft.teaser" type="text" class="loingo-input" :maxlength="MAX_LOI_NGO_LINE" placeholder="Ví dụ: “Chim có tổ, người có tông”" />
+          </label>
+
+          <label class="field field--full">
+            <span class="field-label">
+              Nội dung
+              <small class="field-hint">{{ loiNgoParagraphCount }} đoạn</small>
+            </span>
+            <textarea v-model="loiNgoDraft.body" class="loingo-body" rows="16" spellcheck="false"></textarea>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Lời chào cuối</span>
+            <input v-model="loiNgoDraft.sign" type="text" class="loingo-input" :maxlength="MAX_LOI_NGO_LINE" placeholder="Ví dụ: Chào thân ái," />
+          </label>
+        </div>
+
+        <div class="events-actions">
+          <button type="button" class="btn btn--ghost" @click="restoreDefaultLoiNgo">Khôi phục mặc định</button>
+          <span class="events-actions-spacer"></span>
+          <button type="button" class="btn" :disabled="!loiNgoDirty" @click="resetLoiNgoDraft">Hủy thay đổi</button>
+          <button type="button" class="btn btn--primary" :disabled="!loiNgoDirty || isSaving" @click="saveLoiNgo">
+            Lưu lời ngỏ
+          </button>
+        </div>
+        <p v-if="loiNgoError" class="form-error" role="alert">{{ loiNgoError }}</p>
+        <p v-else-if="loiNgoMessage" class="lunar-events-message">{{ loiNgoMessage }}</p>
+      </section>
     </div>
 
     <p v-if="isLoading" class="status-message">Đang tải dữ liệu từ file JSON...</p>
     <p v-else-if="loadingError" class="status-message error">{{ loadingError }}</p>
 
     <!-- View page: the tree sits behind a closed door; click the lock to open it -->
-    <GateDoor :enabled="!isEditableMode" @phase="onGatePhase">
+    <GateDoor :enabled="!isEditableMode" :loi-ngo="loiNgo" @phase="onGatePhase">
     <!-- Behind the door too: shown (collapsed) once the visitor has gone in, never over the door or the Lời ngỏ page -->
-    <LoiNgo />
+    <LoiNgo :content="loiNgo" />
     <FamilyTree
       :members="members"
       :can-manage="isEditableMode"
@@ -2356,8 +2475,61 @@ onMounted(async () => {
   padding: 1.1rem 1.2rem;
 }
 
-.events-panel {
+.events-panel,
+.loingo-panel {
   grid-column: 1 / -1;
+}
+
+.loingo-panel {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.1rem 1.2rem;
+}
+
+.loingo-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.8rem;
+}
+
+.loingo-input,
+.loingo-body {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--field-line);
+  border-radius: 8px;
+  background: #fffdf7;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  color: #3d2a17;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+/* reads like the Lời ngỏ itself: serif, generous line height, resizable */
+.loingo-body {
+  min-height: 18rem;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.loingo-input:focus,
+.loingo-body:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(47, 70, 120, 0.15);
+}
+
+@media (max-width: 640px) {
+  .loingo-panel {
+    padding: 0.85rem;
+    border-radius: 12px;
+  }
+
+  .loingo-input,
+  .loingo-body {
+    font-size: 16px;
+  }
 }
 
 .editor-panel {

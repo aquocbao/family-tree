@@ -1,5 +1,6 @@
 import type { FamilyDatabase } from '../types/family'
 import { DEFAULT_LUNAR_EVENTS, cloneLunarEvents, isValidLunarEventList } from '../utils/lunar-events'
+import { DEFAULT_LOI_NGO, cloneLoiNgo, isValidLoiNgo } from './loi-ngo'
 
 const defaultSettings = {
   showBirthDate: true,
@@ -33,6 +34,7 @@ const normalizeSettings = (settings?: FamilyDatabase['settings']): NonNullable<F
     lunarEvents: cloneLunarEvents(
       isValidLunarEventList(settings?.lunarEvents) ? settings.lunarEvents : DEFAULT_LUNAR_EVENTS,
     ),
+    loiNgo: cloneLoiNgo(isValidLoiNgo(settings?.loiNgo) ? settings.loiNgo : DEFAULT_LOI_NGO),
   }
 }
 
@@ -52,7 +54,8 @@ const hasValidBooleanFields = (settings?: FamilyDatabase['settings']): boolean =
     (settings.showMemorialPlace === undefined || typeof settings.showMemorialPlace === 'boolean') &&
     (settings.showDateInfo === undefined || typeof settings.showDateInfo === 'boolean') &&
     (settings.notificationMonths === undefined || isValidNotificationMonths(settings.notificationMonths)) &&
-    (settings.lunarEvents === undefined || isValidLunarEventList(settings.lunarEvents))
+    (settings.lunarEvents === undefined || isValidLunarEventList(settings.lunarEvents)) &&
+    (settings.loiNgo === undefined || isValidLoiNgo(settings.loiNgo))
   )
 }
 

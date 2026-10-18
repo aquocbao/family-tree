@@ -1,11 +1,49 @@
 // Lời ngỏ (foreword of the family record): shown on the view page and on the page after the door opens.
-export const LOI_NGO_PARAGRAPHS: readonly string[] = [
-  '“Chim có tổ, người có tông”, “Cây có cội, nước có nguồn”, những câu ca dao nói lên đạo lý của con người Việt Nam chúng ta đã lưu truyền bao đời nay dẫu cho xã hội có nhiều biến động, thay đổi. Vì vậy việc truy tìm nguồn gốc tổ tiên, chăm lo mồ mả ông bà, là những điều gần như nằm trong tiềm thức của mỗi một con người Việt Nam.',
-  'Ông tổ dòng họ PHẠM chúng ta đến lập nghiệp và định cư tại Ấp 1 xã Long Thới, Huyện Nhà Bè (nay xã Hiệp Phước) Thành phố Hồ Chí Minh, đã hơn 200 năm nay. Các bậc tiền bối họ PHẠM đã cần cù lao động với mong muốn gầy dựng cho con cháu đời sau một tiền đồ sáng lạn hơn. Đất nước trải qua nhiều binh biến, các bậc tiền nhân và con cháu họ PHẠM chúng ta cũng đã sả thân vì đại nghĩa. Tất cả những điều đó là những tấm gương sáng để con cháu học tập noi gương, tiếp tục truyền thống của gia đình và dòng họ để phấn đấu xây dựng một cuộc sống ấm no hạnh phúc cho chính bản thân mình và góp phần xây dựng cộng đồng xã hội.',
-  'Trong thời gian qua, họ PHẠM chúng ta đã được lập gia phả viết tay do ông PHẠM VĂN THẠNH (ông 7 Lê) và sau đó giao ông PHẠM THANH TOÀN (con ông 7 Lê) bổ sung để dựng bộ gia phả cho dòng tộc mình, nhằm thắt chặt hơn nữa tình cảm giữa những người bà con ruột thịt, để có thể cùng nhau chia sẻ những vui buồn trong cuộc sống, cũng như để nhắc nhở con cháu về truyền thống dòng họ mình, mà nó có thể là niềm tự hào và sức mạnh tinh thần quí giá trong hành trang của mỗi thành viên dòng họ PHẠM trên con đường lập nghiệp.',
-  'Chúng tôi con ông PHẠM VĂN LƯỢNG là PHẠM VĂN QUÍ, biên soạn và cập nhật lại gia phả trên máy vi tính, theo toàn văn bộ gia phả viết tay của ông PHẠM VĂN THẠNH (ông 7 Lê) đã dày công xây dựng lập bộ gia phả dòng họ PHẠM chúng ta, chắc chắn không tránh khỏi sai sót và thiếu, xin bà con cô bác họ PHẠM góp ý để bổ sung cho hoàn chỉnh và dễ tiếp tục cập nhật từ nay đến các đời con cháu sau này.',
-  'Nay, để gia phả tiếp tục được gìn giữ và cập nhật cho các thế hệ mai sau, gia đình ông PHẠM THÀNH CÔNG (con ông PHẠM VĂN LƯỢNG) chúng tôi đưa bộ gia phả lên trang web, với tất cả lòng thành kính đối với tổ tiên và tinh thần trách nhiệm đối với dòng tộc, để con cháu họ PHẠM dù ở nơi đâu cũng có thể tìm về cội nguồn của mình.',
-  'Chúng tôi chỉ cập nhật thêm, nếu sinh ra là trai thì tiếp tục cập nhật vào bộ gia phả này, còn nếu sinh ra là gái thì không tiếp tục cập nhật vào bộ gia phả nữa, rất mong bà con cô bác bên ngoại họ PHẠM thông cảm và chia sẻ./.',
-]
+// Stored in the tree settings (settings.loiNgo, editable on the admin page); this is the default text.
+// Plain TS with no Vue imports: also used by the server (worker/, vite.config.ts) to validate saves.
 
-export const LOI_NGO_SIGN = 'Chào thân ái,'
+export interface LoiNgo {
+  /** Short line under the "Lời ngỏ" title while it is collapsed (may be empty) */
+  teaser: string
+  paragraphs: string[]
+  /** Closing line, e.g. "Chào thân ái," (may be empty) */
+  sign: string
+}
+
+export const MAX_LOI_NGO_PARAGRAPHS = 40
+export const MAX_LOI_NGO_PARAGRAPH = 4000
+export const MAX_LOI_NGO_LINE = 200
+
+export const DEFAULT_LOI_NGO: LoiNgo = {
+  teaser: '“Chim có tổ, người có tông” · “Cây có cội, nước có nguồn”',
+  paragraphs: [
+    '“Chim có tổ, người có tông”, “Cây có cội, nước có nguồn”, những câu ca dao nói lên đạo lý của con người Việt Nam chúng ta đã lưu truyền bao đời nay dẫu cho xã hội có nhiều biến động, thay đổi. Vì vậy việc truy tìm nguồn gốc tổ tiên, chăm lo mồ mả ông bà, là những điều gần như nằm trong tiềm thức của mỗi một con người Việt Nam.',
+    'Ông tổ dòng họ PHẠM chúng ta đến lập nghiệp và định cư tại Ấp 1 xã Long Thới, Huyện Nhà Bè (nay xã Hiệp Phước) Thành phố Hồ Chí Minh, đã hơn 200 năm nay. Các bậc tiền bối họ PHẠM đã cần cù lao động với mong muốn gầy dựng cho con cháu đời sau một tiền đồ sáng lạn hơn. Đất nước trải qua nhiều binh biến, các bậc tiền nhân và con cháu họ PHẠM chúng ta cũng đã sả thân vì đại nghĩa. Tất cả những điều đó là những tấm gương sáng để con cháu học tập noi gương, tiếp tục truyền thống của gia đình và dòng họ để phấn đấu xây dựng một cuộc sống ấm no hạnh phúc cho chính bản thân mình và góp phần xây dựng cộng đồng xã hội.',
+    'Trong thời gian qua, họ PHẠM chúng ta đã được lập gia phả viết tay do ông PHẠM VĂN THẠNH (ông 7 Lê) và sau đó giao ông PHẠM THANH TOÀN (con ông 7 Lê) bổ sung để dựng bộ gia phả cho dòng tộc mình, nhằm thắt chặt hơn nữa tình cảm giữa những người bà con ruột thịt, để có thể cùng nhau chia sẻ những vui buồn trong cuộc sống, cũng như để nhắc nhở con cháu về truyền thống dòng họ mình, mà nó có thể là niềm tự hào và sức mạnh tinh thần quí giá trong hành trang của mỗi thành viên dòng họ PHẠM trên con đường lập nghiệp.',
+    'Chúng tôi con ông PHẠM VĂN LƯỢNG là PHẠM VĂN QUÍ, biên soạn và cập nhật lại gia phả trên máy vi tính, theo toàn văn bộ gia phả viết tay của ông PHẠM VĂN THẠNH (ông 7 Lê) đã dày công xây dựng lập bộ gia phả dòng họ PHẠM chúng ta, chắc chắn không tránh khỏi sai sót và thiếu, xin bà con cô bác họ PHẠM góp ý để bổ sung cho hoàn chỉnh và dễ tiếp tục cập nhật từ nay đến các đời con cháu sau này.',
+    'Nay, để gia phả tiếp tục được gìn giữ và cập nhật cho các thế hệ mai sau, gia đình ông PHẠM THÀNH CÔNG (con ông PHẠM VĂN LƯƠNG) chúng tôi đưa bộ gia phả lên trang web, với tất cả lòng thành kính đối với tổ tiên và tinh thần trách nhiệm đối với dòng tộc, để con cháu họ PHẠM dù ở nơi đâu cũng có thể tìm về cội nguồn của mình.',
+    'Chúng tôi chỉ cập nhật thêm, nếu sinh ra là trai thì tiếp tục cập nhật vào bộ gia phả này, còn nếu sinh ra là gái thì không tiếp tục cập nhật vào bộ gia phả nữa, rất mong bà con cô bác bên ngoại họ PHẠM thông cảm và chia sẻ./.',
+  ],
+  sign: 'Chào thân ái,',
+}
+
+const isLine = (value: unknown): value is string => typeof value === 'string' && value.length <= MAX_LOI_NGO_LINE
+
+export const isValidLoiNgo = (value: unknown): value is LoiNgo => {
+  if (!value || typeof value !== 'object') return false
+  const v = value as Record<string, unknown>
+  return (
+    isLine(v.teaser) &&
+    isLine(v.sign) &&
+    Array.isArray(v.paragraphs) &&
+    v.paragraphs.length >= 1 &&
+    v.paragraphs.length <= MAX_LOI_NGO_PARAGRAPHS &&
+    v.paragraphs.every((p) => typeof p === 'string' && p.trim().length > 0 && p.length <= MAX_LOI_NGO_PARAGRAPH)
+  )
+}
+
+export const cloneLoiNgo = (value: LoiNgo): LoiNgo => ({
+  teaser: value.teaser,
+  paragraphs: [...value.paragraphs],
+  sign: value.sign,
+})

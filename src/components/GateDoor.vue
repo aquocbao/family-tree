@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from 'vue'
-import { LOI_NGO_PARAGRAPHS, LOI_NGO_SIGN } from '../data/loi-ngo'
+import { DEFAULT_LOI_NGO, type LoiNgo } from '../data/loi-ngo'
 
 /**
  * A closed lacquered double door over the family tree. Clicking the lock lifts its shackle, the two
  * doors swing open onto a page with the Lời ngỏ; "Vào xem gia phả" then shows the tree. Remembered for the browser session (not shown again on reload).
  */
-const props = withDefaults(defineProps<{ enabled?: boolean }>(), { enabled: true })
+const props = withDefaults(defineProps<{ enabled?: boolean; loiNgo?: LoiNgo }>(), {
+  enabled: true,
+  loiNgo: () => DEFAULT_LOI_NGO,
+})
 
 const STORAGE_KEY = 'gia-pha-gate-open'
 const readOpened = (): boolean => {
@@ -117,8 +120,8 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
         <p class="welcome-kicker">范氏家谱 · Phạm Thị Gia Phả</p>
         <h2 id="gate-welcome-title" class="welcome-title">Lời ngỏ</h2>
         <div class="welcome-divider" aria-hidden="true"><span>❖</span></div>
-        <p v-for="(text, index) in LOI_NGO_PARAGRAPHS" :key="index" class="welcome-text">{{ text }}</p>
-        <p class="welcome-sign">{{ LOI_NGO_SIGN }}</p>
+        <p v-for="(text, index) in props.loiNgo.paragraphs" :key="index" class="welcome-text">{{ text }}</p>
+        <p v-if="props.loiNgo.sign" class="welcome-sign">{{ props.loiNgo.sign }}</p>
         <button type="button" class="welcome-enter" @click="finish">Vào xem gia phả →</button>
       </div>
       <div class="scroll-rod" aria-hidden="true"></div>

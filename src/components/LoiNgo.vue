@@ -1,20 +1,20 @@
 <script setup lang="ts">
-import { LOI_NGO_PARAGRAPHS, LOI_NGO_SIGN } from '../data/loi-ngo'
+import { DEFAULT_LOI_NGO, type LoiNgo } from '../data/loi-ngo'
 
 /** "Lời ngỏ": the foreword of the family record, shown above the tree. Closed by default so the tree stays near the top. */
-const paragraphs = LOI_NGO_PARAGRAPHS
+withDefaults(defineProps<{ content?: LoiNgo }>(), { content: () => DEFAULT_LOI_NGO })
 </script>
 
 <template>
   <details class="loi-ngo">
     <summary>
       <span class="loi-ngo-title">Lời ngỏ</span>
-      <span class="loi-ngo-teaser">“Chim có tổ, người có tông” · “Cây có cội, nước có nguồn”</span>
+      <span v-if="content.teaser" class="loi-ngo-teaser">{{ content.teaser }}</span>
       <span class="loi-ngo-hint" aria-hidden="true"></span>
     </summary>
     <div class="loi-ngo-body">
-      <p v-for="(text, index) in paragraphs" :key="index">{{ text }}</p>
-      <p class="loi-ngo-sign">{{ LOI_NGO_SIGN }}</p>
+      <p v-for="(text, index) in content.paragraphs" :key="index">{{ text }}</p>
+      <p v-if="content.sign" class="loi-ngo-sign">{{ content.sign }}</p>
     </div>
   </details>
 </template>

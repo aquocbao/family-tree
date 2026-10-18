@@ -6,6 +6,7 @@ import path from 'node:path'
 import type { IncomingMessage } from 'node:http'
 import { APPROVE_KEY, DOWNLOAD_KEY } from './src/admin-paths'
 import { DEFAULT_LUNAR_EVENTS, isValidLunarEventList } from './src/utils/lunar-events'
+import { DEFAULT_LOI_NGO, isValidLoiNgo } from './src/data/loi-ngo'
 
 const dbFilePath = path.resolve(import.meta.dirname, 'src/data/family-db.json')
 
@@ -38,6 +39,7 @@ type RawSettings = {
   showDateInfo?: unknown
   notificationMonths?: unknown
   lunarEvents?: unknown
+  loiNgo?: unknown
 }
 
 const createDefaultDatabase = (): {
@@ -139,7 +141,8 @@ const isValidSettings = (value: unknown): value is RawSettings => {
         Number.isInteger(settings.notificationMonths) &&
         settings.notificationMonths >= 0 &&
         settings.notificationMonths <= 12)) &&
-    (settings.lunarEvents === undefined || isValidLunarEventList(settings.lunarEvents))
+    (settings.lunarEvents === undefined || isValidLunarEventList(settings.lunarEvents)) &&
+    (settings.loiNgo === undefined || isValidLoiNgo(settings.loiNgo))
   )
 }
 
@@ -172,6 +175,7 @@ const withDefaultSettings = (value: unknown): Record<string, unknown> => {
     showMemorialPlace: s.showMemorialPlace ?? true,
     notificationMonths: s.notificationMonths ?? 3,
     lunarEvents: s.lunarEvents ?? DEFAULT_LUNAR_EVENTS,
+    loiNgo: s.loiNgo ?? DEFAULT_LOI_NGO,
   }
 }
 
