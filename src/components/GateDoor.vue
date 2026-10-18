@@ -25,7 +25,9 @@ const shown = computed<GateState>(() => (props.enabled ? state.value : 'open'))
 type GatePhase = 'door' | 'welcome' | 'open'
 const emit = defineEmits<{ phase: [phase: GatePhase] }>()
 watch(
-  (): GatePhase => (shown.value === 'open' ? 'open' : shown.value === 'welcome' ? 'welcome' : 'door'),
+  // the Lời ngỏ page counts from the moment the doors start swinging open (it is already behind them)
+  (): GatePhase =>
+    shown.value === 'open' ? 'open' : shown.value === 'opening' || shown.value === 'welcome' ? 'welcome' : 'door',
   (phase) => emit('phase', phase),
   { immediate: true },
 )
