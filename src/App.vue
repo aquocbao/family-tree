@@ -197,6 +197,13 @@ const appHeaderRef = ref<HTMLElement | null>(null)
 const headerBandRef = ref<HTMLElement | null>(null)
 const coupletSpacerRef = ref<HTMLElement | null>(null)
 const isHeaderCompact = ref(false)
+// From GateDoor: the door, the Lời ngỏ page or the tree is on screen
+const gatePhase = ref<'door' | 'welcome' | 'open'>('open')
+
+const onGatePhase = (phase: 'door' | 'welcome' | 'open'): void => {
+  gatePhase.value = phase
+  void nextTick(updateTitleLayout)
+}
 
 // Compact title bar after scrolling down a bit (two thresholds so it doesn't flicker at the edge).
 const onWindowScroll = (): void => {
@@ -221,9 +228,14 @@ const updateTitleLayout = (): void => {
   if (!spacer || !couplet) {
     return
   }
+  const couplets = document.querySelectorAll<HTMLElement>('.couplet')
+  let coupletShift = 0 // vertical translate; offsetTop ignores it, so measurements use the natural position
 
+  const app = spacer.parentElement
   if (getComputedStyle(couplet).position !== 'absolute') {
+    couplets.forEach((el) => (el.style.transform = ''))
     spacer.style.height = '0px' // wide screens: scrolls are fixed at the sides
+    app?.style.setProperty('--couplet-lift', '0px')
     return
   }
 
@@ -231,7 +243,17 @@ const updateTitleLayout = (): void => {
   spacer.style.height = '0px'
   const coupletBottom = couplet.offsetTop + couplet.offsetHeight
   const spacerTop = spacer.offsetTop
-  spacer.style.height = `${Math.max(0, coupletBottom - spacerTop + 16)}px`
+  const lift = Math.max(0, coupletBottom - spacerTop + 16)
+  spacer.style.height = `${lift}px`
+  // lets the closed door move up between the scrolls (GateDoor.vue)
+  app?.style.setProperty('--couplet-lift', `${lift}px`)
+
+  // Door / Lời ngỏ page: the scrolls hang beside it, their tops level with its top
+  const gate = document.querySelector<HTMLElement>('.gate')
+  if (gatePhase.value !== 'open' && gate) {
+    coupletShift = Math.max(0, Math.round(gate.offsetTop - couplet.offsetTop))
+  }
+  couplets.forEach((el) => (el.style.transform = coupletShift ? `translateY(${coupletShift}px)` : ''))
 }
 
 onMounted(() => {
@@ -1131,7 +1153,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="app">
+  <main class="app" :class="{ 'app--welcome': gatePhase === 'welcome' }">
     <aside class="couplet couplet--left" :title="`Vế trái: ${COUPLET_LEFT.meaning}`" :aria-label="`Câu đối, vế trái: ${COUPLET_LEFT.meaning}`">
       <span v-for="(char, index) in COUPLET_LEFT.chars" :key="index" class="couplet-cell" aria-hidden="true">
         <span class="couplet-char">{{ char }}</span>
@@ -1549,7 +1571,7 @@ onMounted(async () => {
     <p v-else-if="loadingError" class="status-message error">{{ loadingError }}</p>
 
     <!-- View page: the tree sits behind a closed door; click the lock to open it -->
-    <GateDoor :enabled="!isEditableMode">
+    <GateDoor :enabled="!isEditableMode" @phase="onGatePhase">
     <!-- Behind the door too: shown (collapsed) once the visitor has gone in, never over the door or the Lời ngỏ page -->
     <LoiNgo />
     <FamilyTree
@@ -2337,6 +2359,7 @@ onMounted(async () => {
     position: absolute;
     top: 1.1rem;
     transform: none;
+    transition: transform 0.8s ease; /* slides back up when the door opens */
   }
 
   .couplet--left {
@@ -2402,6 +2425,11 @@ onMounted(async () => {
 
   .couplet--right {
     right: 0.4rem;
+  }
+
+  /* Lời ngỏ page: no scrolls on phones, the page gets the full width */
+  .app--welcome .couplet {
+    display: none;
   }
 
   .app-header {

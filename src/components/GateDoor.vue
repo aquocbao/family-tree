@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, provide, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from 'vue'
 import { LOI_NGO_PARAGRAPHS, LOI_NGO_SIGN } from '../data/loi-ngo'
 
 /**
@@ -21,6 +21,14 @@ type GateState = 'closed' | 'unlocking' | 'opening' | 'welcome' | 'open'
 const state = ref<GateState>(readOpened() ? 'open' : 'closed')
 // Admin pages (enabled = false) never show the door
 const shown = computed<GateState>(() => (props.enabled ? state.value : 'open'))
+// What is on screen: the door, the Lời ngỏ page or the tree (App.vue places the câu đối scrolls accordingly)
+type GatePhase = 'door' | 'welcome' | 'open'
+const emit = defineEmits<{ phase: [phase: GatePhase] }>()
+watch(
+  (): GatePhase => (shown.value === 'open' ? 'open' : shown.value === 'welcome' ? 'welcome' : 'door'),
+  (phase) => emit('phase', phase),
+  { immediate: true },
+)
 // Lets the tree wait until it can be seen (e.g. before scrolling to the default person)
 provide(
   'gateOpen',
@@ -511,7 +519,35 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
   }
 }
 
+/* tablets & phones: the câu đối scrolls hang beside the plaque. The door and the Lời ngỏ page move up
+   into the gap between them (--couplet-lift is the spacer height set by App.vue). */
+@media (max-width: 1099px) {
+  .gate:not(.gate--open) {
+    margin-top: calc(-1 * var(--couplet-lift, 0px));
+  }
+
+  .gate-doors {
+    left: 5.25rem;
+    right: 5.25rem;
+  }
+
+  .gate-welcome {
+    width: auto;
+    margin: 0 5.25rem 2rem;
+  }
+}
+
 @media (max-width: 640px) {
+  .gate-doors {
+    left: 3.65rem;
+    right: 3.65rem;
+  }
+
+  /* phones: App.vue hides the scrolls on the Lời ngỏ page, so it uses the full width */
+  .gate-welcome {
+    margin: 0 auto 2rem;
+  }
+
   .gate--closed,
   .gate--unlocking,
   .gate--opening {
