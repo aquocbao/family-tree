@@ -1,6 +1,7 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { promises as fs } from 'node:fs'
+import { execSync } from 'node:child_process'
+import { promises as fs, readFileSync } from 'node:fs'
 import path from 'node:path'
 import type { IncomingMessage } from 'node:http'
 import { APPROVE_KEY, DOWNLOAD_KEY } from './src/admin-paths'
@@ -455,9 +456,40 @@ const familyDbPlugin = (downloadPassword?: string, approvePassword: string = APP
   }
 }
 
+// Shown in the page footer: version from package.json, short git commit (if available) and build date.
+const appVersion = (): string =>
+  (JSON.parse(readFileSync(path.resolve(import.meta.dirname, 'package.json'), 'utf8')) as { version: string }).version
+
+const gitCommit = (): string => {
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+  } catch {
+    return ''
+  }
+}
+
+// The version is read once at startup: restart the dev server when package.json changes so the footer follows.
+const restartOnPackageJsonChange = (): Plugin => ({
+  name: 'restart-on-package-json-change',
+  configureServer(server) {
+    const file = path.resolve(import.meta.dirname, 'package.json')
+    server.watcher.add(file)
+    server.watcher.on('change', (changed) => {
+      if (path.resolve(changed) === file) {
+        void server.restart()
+      }
+    })
+  },
+})
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [vue(), familyDbPlugin(env.DOWNLOAD_PASSWORD || DOWNLOAD_KEY, env.APPROVE_PASSWORD || APPROVE_KEY)],
+    plugins: [vue(), restartOnPackageJsonChange(), familyDbPlugin(env.DOWNLOAD_PASSWORD || DOWNLOAD_KEY, env.APPROVE_PASSWORD || APPROVE_KEY)],
+    define: {
+      __APP_VERSION__: JSON.stringify(appVersion()),
+      __APP_COMMIT__: JSON.stringify(gitCommit()),
+      __APP_BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    },
   }
 })

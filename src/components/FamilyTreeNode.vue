@@ -50,11 +50,14 @@ const hasCouple = computed(() => !isMulti.value && members.value.length === 2)
 const spouseA = computed(() => members.value[0])
 const spouseB = computed(() => members.value[1])
 const childUnits = computed(() => props.childUnitsResolver(props.unit.key))
+const isExpanded = ref(props.depth <= props.expandDepth)
 // The other family of a married child (e.g. the bride's parents): drawn on this row, next to this couple,
 // so both sets of parents sit at the same level. FamilyTree draws a dashed link down to their child.
 const inLawGuests = computed(() => {
   const resolver = props.inLawParentsResolver
-  if (!resolver) {
+  // Collapsed: the children (and so the married-in child) are hidden, so their parents would only leave an
+  // empty gap beside this row.
+  if (!resolver || !isExpanded.value) {
     return []
   }
   // inPlace: the child is one of several spouses and stays in that row (no copy under the parents);
@@ -141,7 +144,6 @@ const soloMember = computed(() =>
   displacedSpouse.value ? members.value.find((member) => member.id !== displacedSpouse.value?.id) ?? members.value[0] : members.value[0],
 )
 const hasChildren = computed(() => childUnits.value.length > 0)
-const isExpanded = ref(props.depth <= props.expandDepth)
 
 watch(
   () => props.expandRequest,

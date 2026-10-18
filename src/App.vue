@@ -5,6 +5,15 @@ import { ADMIN_PATH, SUPER_ADMIN_PATH } from './admin-paths'
 import FamilyTree from './components/FamilyTree.vue'
 import SearchableMemberSelect from './components/SearchableMemberSelect.vue'
 import GateDoor from './components/GateDoor.vue'
+import LoiNgo from './components/LoiNgo.vue'
+
+// Footer: "1.0.0 (a69d10e) · 18/10/2026"
+const APP_VERSION_LABEL = (() => {
+  const built = new Date(__APP_BUILD_TIME__)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  const date = `${pad(built.getDate())}/${pad(built.getMonth() + 1)}/${built.getFullYear()}`
+  return `${__APP_VERSION__}${__APP_COMMIT__ ? ` (${__APP_COMMIT__})` : ''} · ${date}`
+})()
 import { fetchFamilyDatabase, saveFamilyDatabase } from './data/family-db-api'
 import { solarDateTextToLunarText } from './utils/lunar'
 import { isDeceased as isDeceasedMember } from './utils/memorial'
@@ -1536,6 +1545,9 @@ onMounted(async () => {
       </section>
     </div>
 
+    <!-- View page: the Lời ngỏ is its own page after the door opens (GateDoor), so the card is only for admins -->
+    <LoiNgo v-if="isEditableMode" />
+
     <p v-if="isLoading" class="status-message">Đang tải dữ liệu từ file JSON...</p>
     <p v-else-if="loadingError" class="status-message error">{{ loadingError }}</p>
 
@@ -1556,6 +1568,14 @@ onMounted(async () => {
       @toggle-member-hidden="toggleMemberHidden"
     />
     </GateDoor>
+
+    <footer class="app-footer">
+      <p class="footer-contact">
+        Mọi thông tin bổ sung hoặc góp ý cho gia phả, xin vui lòng liên hệ ông <strong>PHẠM THÀNH CÔNG</strong>.
+        <br />Xin chân thành cảm ơn!
+      </p>
+      <p class="footer-version">Phiên bản {{ APP_VERSION_LABEL }}</p>
+    </footer>
   </main>
 </template>
 
@@ -1566,6 +1586,36 @@ onMounted(async () => {
   max-width: none;
   margin: 0;
   padding: 2rem var(--app-pad-x) 3rem;
+}
+
+/* contact note + small version line at the very bottom */
+.app-footer {
+  width: min(640px, 100%);
+  margin: 2rem auto 0;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(201, 162, 74, 0.6);
+  text-align: center;
+}
+
+.footer-contact {
+  margin: 0;
+  font-family: 'Noto Serif', Georgia, serif;
+  font-size: 0.92rem;
+  font-style: italic;
+  line-height: 1.6;
+  color: #6b4a2b;
+}
+
+.footer-contact strong {
+  font-style: normal;
+  color: #7a1d16;
+}
+
+.footer-version {
+  margin: 0.6rem 0 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  color: #9a7a55;
 }
 
 /* ---------- Title band ---------- */

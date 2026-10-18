@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import { LOI_NGO_PARAGRAPHS, LOI_NGO_SIGN } from '../data/loi-ngo'
 
 /**
  * A closed lacquered double door over the family tree. Clicking the lock lifts its shackle, the two
- * doors swing open and the tree appears. Remembered for the browser session (not shown again on reload).
+ * doors swing open onto a page with the Lời ngỏ; "Vào xem gia phả" then shows the tree. Remembered for the browser session (not shown again on reload).
  */
 const props = withDefaults(defineProps<{ enabled?: boolean }>(), { enabled: true })
 
@@ -16,11 +17,20 @@ const readOpened = (): boolean => {
   }
 }
 
-type GateState = 'closed' | 'unlocking' | 'opening' | 'open'
+type GateState = 'closed' | 'unlocking' | 'opening' | 'welcome' | 'open'
 const state = ref<GateState>(readOpened() ? 'open' : 'closed')
 // Admin pages (enabled = false) never show the door
 const shown = computed<GateState>(() => (props.enabled ? state.value : 'open'))
 const timers: number[] = []
+
+const welcomeRef = ref<HTMLElement | null>(null)
+
+// Doors are open: the Lời ngỏ page (already behind the doors while they swing) stays until the reader goes in
+const showWelcome = async (): Promise<void> => {
+  state.value = 'welcome'
+  await nextTick()
+  welcomeRef.value?.focus({ preventScroll: true })
+}
 
 const finish = (): void => {
   state.value = 'open'
@@ -37,12 +47,12 @@ const openGate = (): void => {
   if (state.value !== 'closed') return
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
   if (reduceMotion) {
-    finish()
+    void showWelcome()
     return
   }
   state.value = 'unlocking'
   timers.push(window.setTimeout(() => (state.value = 'opening'), 550))
-  timers.push(window.setTimeout(finish, 550 + 1700))
+  timers.push(window.setTimeout(() => void showWelcome(), 550 + 1700))
 }
 
 onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
@@ -50,11 +60,30 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
 
 <template>
   <div class="gate" :class="`gate--${shown}`">
-    <div class="gate-content" :aria-hidden="shown === 'closed' || shown === 'unlocking' ? 'true' : undefined">
+    <div class="gate-content" :aria-hidden="shown === 'open' ? undefined : 'true'">
       <slot />
     </div>
 
-    <div v-if="shown !== 'open'" class="gate-doors">
+    <section
+      v-if="shown === 'opening' || shown === 'welcome'"
+      ref="welcomeRef"
+      class="gate-welcome"
+      tabindex="-1"
+      aria-labelledby="gate-welcome-title"
+    >
+      <div class="scroll-rod" aria-hidden="true"></div>
+      <div class="scroll-paper">
+        <p class="welcome-kicker">范氏家谱 · Phạm Thị Gia Phả</p>
+        <h2 id="gate-welcome-title" class="welcome-title">Lời ngỏ</h2>
+        <div class="welcome-divider" aria-hidden="true"><span>❖</span></div>
+        <p v-for="(text, index) in LOI_NGO_PARAGRAPHS" :key="index" class="welcome-text">{{ text }}</p>
+        <p class="welcome-sign">{{ LOI_NGO_SIGN }}</p>
+        <button type="button" class="welcome-enter" @click="finish">Vào xem gia phả →</button>
+      </div>
+      <div class="scroll-rod" aria-hidden="true"></div>
+    </section>
+
+    <div v-if="shown !== 'open' && shown !== 'welcome'" class="gate-doors">
       <div class="gate-beam" aria-hidden="true"></div>
       <div class="door door--left" aria-hidden="true">
         <div class="door-panel door-panel--top"><span class="door-glyph">家 (Gia)</span></div>
@@ -104,16 +133,145 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
   transition: opacity 1.2s ease 0.3s;
 }
 
+/* Lời ngỏ page: the tree stays laid out but out of sight until the reader goes in */
+.gate--opening .gate-content,
+.gate--welcome .gate-content {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+.gate-welcome {
+  width: min(860px, 100%);
+  margin: 0 auto 2rem;
+  outline: none;
+  animation: welcome-in 0.7s ease both;
+}
+
+/* wooden rods at both ends of the scroll */
+.scroll-rod {
+  height: 18px;
+  margin: 0 -14px;
+  border-radius: 9px;
+  background:
+    radial-gradient(circle at 9px 50%, #f3cf6e 0 5px, #9a6a1c 6px, transparent 7px) left center / 18px 18px no-repeat,
+    radial-gradient(circle at 9px 50%, #f3cf6e 0 5px, #9a6a1c 6px, transparent 7px) right center / 18px 18px no-repeat,
+    linear-gradient(#8a3a1c, #5e1f0c 60%, #3e1306);
+  box-shadow: 0 3px 6px rgba(40, 10, 4, 0.4);
+  position: relative;
+  z-index: 1;
+}
+
+.scroll-paper {
+  padding: 2rem clamp(1.1rem, 5vw, 3.25rem) 2.25rem;
+  background:
+    linear-gradient(90deg, rgba(120, 70, 20, 0.12), transparent 6%, transparent 94%, rgba(120, 70, 20, 0.12)),
+    linear-gradient(180deg, #fbf3dc 0%, #f4e6c1 100%);
+  border-left: 1px solid #c9a24a;
+  border-right: 1px solid #c9a24a;
+  color: #3d2a17;
+  font-family: 'Noto Serif', Georgia, serif;
+  transform-origin: top center;
+  animation: scroll-unroll 1s cubic-bezier(0.3, 0.6, 0.25, 1) 0.15s both;
+}
+
+.welcome-kicker {
+  margin: 0;
+  text-align: center;
+  font-size: 0.85rem;
+  letter-spacing: 0.18em;
+  color: #8a5a2b;
+}
+
+.welcome-title {
+  margin: 0.35rem 0 0;
+  text-align: center;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7a1d16;
+}
+
+.welcome-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(280px, 70%);
+  margin: 0.6rem auto 0.4rem;
+  color: #b8892f;
+}
+
+.welcome-divider::before,
+.welcome-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid #c9a24a;
+}
+
+.welcome-text {
+  margin: 1rem 0 0;
+  font-size: 1.05rem;
+  line-height: 1.85;
+  text-align: justify;
+  text-indent: 2em;
+}
+
+.welcome-sign {
+  margin: 1.25rem 0 0;
+  text-align: right;
+  font-style: italic;
+  font-weight: 600;
+}
+
+.welcome-enter {
+  display: block;
+  margin: 1.75rem auto 0;
+  padding: 0.65rem 1.6rem;
+  border: 2px solid #c9a24a;
+  border-radius: 999px;
+  background: linear-gradient(#a3241a, #7e160f);
+  color: #f6dfa0;
+  font-family: 'Noto Serif', Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(60, 20, 8, 0.3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.welcome-enter:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(60, 20, 8, 0.38);
+}
+
+.welcome-enter:focus-visible {
+  outline: 3px solid #f3cf6e;
+  outline-offset: 3px;
+}
+
+@keyframes welcome-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes scroll-unroll {
+  from {
+    opacity: 0;
+    transform: scaleY(0.05);
+  }
+}
+
 .gate--closed .gate-content,
 .gate--unlocking .gate-content {
   opacity: 0;
   pointer-events: none;
 }
 
-.gate--opening .gate-content {
-  opacity: 1;
-  pointer-events: none;
-}
 
 .gate-doors {
   position: absolute;
@@ -364,13 +522,26 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
   .lock-text {
     font-size: 0.8rem;
   }
+
+  .welcome-text {
+    font-size: 0.98rem;
+    line-height: 1.7;
+    text-align: left;
+    text-indent: 1.25em;
+  }
+
+  .scroll-rod {
+    margin: 0 -6px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .door,
   .lock-icon,
   .lock-shackle,
-  .gate-content {
+  .gate-content,
+  .gate-welcome,
+  .scroll-paper {
     transition: none;
     animation: none;
   }

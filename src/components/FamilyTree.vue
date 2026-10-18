@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import AnniversaryBar from './AnniversaryBar.vue'
+import AnniversaryList from './AnniversaryList.vue'
 import FamilyTreeNode from './FamilyTreeNode.vue'
 import SearchableMemberSelect from './SearchableMemberSelect.vue'
 import type { FamilyMember, FamilyUnit } from '../types/family'
@@ -46,26 +47,6 @@ const lineageKey = ref<string | null>(null)
 const lineageMemberId = ref<string | null>(null)
 const treeWrapperRef = ref<HTMLElement | null>(null)
 
-/* Height of the notification bar, so the sticky controls sit below it in Full view */
-const anniversaryHeight = ref(0)
-let anniversaryObserver: ResizeObserver | undefined
-const setAnniversaryEl = (component: unknown) => {
-  anniversaryObserver?.disconnect()
-  anniversaryObserver = undefined
-  const el = (component as { $el?: Element } | null)?.$el
-  if (!(el instanceof HTMLElement)) {
-    anniversaryHeight.value = 0
-    return
-  }
-  const measure = () => {
-    anniversaryHeight.value = el.offsetHeight
-  }
-  measure()
-  if (typeof ResizeObserver !== 'undefined') {
-    anniversaryObserver = new ResizeObserver(measure)
-    anniversaryObserver.observe(el)
-  }
-}
 const isFullView = ref(false)
 // iPhone Safari has no Fullscreen API for normal elements: fall back to a fixed overlay.
 const isPseudoFullView = ref(false)
@@ -416,6 +397,14 @@ const updateInLawLinks = (): void => {
   }
 
   const links: { key: string; d: string; dashed?: boolean }[] = []
+
+  // A row that no longer has in-law parents beside it (branch collapsed): put its button back in the middle.
+  for (const toggle of canvas.querySelectorAll<HTMLElement>('.unit-content > .toggle:not([data-couple-toggle])')) {
+    const row = toggle.parentElement?.querySelector<HTMLElement>(':scope > .unit-row')
+    if (row && !row.classList.contains('has-guests') && !row.querySelector('.multi-row') && toggle.style.left) {
+      toggle.style.left = ''
+    }
+  }
 
   for (const guest of canvas.querySelectorAll<HTMLElement>('[data-inlaw-for]')) {
     const childId = guest.dataset.inlawFor ?? ''
@@ -1301,6 +1290,15 @@ const buildPrintHtml = (scope: PrintScope): string => {
 
 type PrintLayout = 'list' | 'tree'
 const isPrintMenuOpen = ref(false)
+
+// "Công cụ": one button that shows/hides the view tools (zoom, expand all, search, print, full view)
+const isToolsOpen = ref(false)
+const toggleTools = (): void => {
+  isToolsOpen.value = !isToolsOpen.value
+  if (!isToolsOpen.value) {
+    isPrintMenuOpen.value = false
+  }
+}
 const printMenuRef = ref<HTMLElement | null>(null)
 
 const printScopeMode = ref<'all' | 'person' | 'lineage'>('all')
@@ -1626,7 +1624,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', syncFullViewState)
   canvasResizeObserver?.disconnect()
-  anniversaryObserver?.disconnect()
   window.removeEventListener('resize', scheduleInLawLinks)
   window.removeEventListener('load', scheduleInLawLinks)
   canvasMutationObserver?.disconnect()
@@ -1640,15 +1637,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section
-    ref="treeWrapperRef"
-    class="tree-wrapper"
-    :class="{ 'full-view-active': isFullView, 'pseudo-full-view': isPseudoFullView }"
-    :style="{ '--anniv-h': `${anniversaryHeight}px` }"
-  >
+  <!-- Block 1: ngày giỗ bar and the đám giỗ / Lễ Tết lists -->
+  <section v-if="notificationMonths > 0" class="anniversary-panel" aria-label="Lịch giỗ và Lễ Tết">
     <AnniversaryBar
-      v-if="notificationMonths > 0"
-      :ref="setAnniversaryEl"
       class="tree-anniversary"
       :members="members"
       :include-hidden="canManage"
@@ -1657,6 +1648,26 @@ onBeforeUnmount(() => {
       :show-memorial-place="showMemorialPlace"
       @select="goToMember"
     />
+
+    <AnniversaryList
+      class="tree-anniversary-list"
+      :members="members"
+      :include-hidden="canManage"
+      :months="notificationMonths"
+      :lunar-events="lunarEvents"
+      :show-memorial-place="showMemorialPlace"
+      @select="goToMember"
+    />
+  </section>
+
+  <!-- Block 2: the gia phả -->
+  <section
+    ref="treeWrapperRef"
+    class="tree-wrapper"
+    :class="{ 'full-view-active': isFullView, 'pseudo-full-view': isPseudoFullView }"
+    aria-labelledby="tree-block-title"
+  >
+    <h2 id="tree-block-title" class="tree-block-title">Gia Phả</h2>
 
     <dl v-if="members.length" class="tree-stats" aria-label="Thống kê gia phả">
       <div class="stat">
@@ -1698,6 +1709,9 @@ onBeforeUnmount(() => {
         </ul>
       </div>
       <div class="control-buttons">
+        <!-- All the view tools sit behind one button; it slides them out to its left -->
+        <Transition name="tools-tray">
+        <div v-show="isToolsOpen" id="tree-tools" class="tools-tray" role="group" aria-label="Công cụ xem gia phả">
         <div class="zoom-controls" role="group" aria-label="Thu phóng">
           <button type="button" aria-label="Thu nhỏ" :disabled="zoom <= ZOOM_MIN" @click="changeZoom(-ZOOM_STEP)">−</button>
           <button type="button" class="zoom-value" title="Về 100%" @click="resetZoom">{{ Math.round(zoom * 100) }}%</button>
@@ -1778,6 +1792,20 @@ onBeforeUnmount(() => {
         >
           <span class="btn-icon" aria-hidden="true">⛶</span>
           <span class="btn-label">{{ isFullView ? 'Thoát Full view' : 'Full view' }}</span>
+        </button>
+        </div>
+        </Transition>
+        <button
+          type="button"
+          class="full-view-btn tools-toggle"
+          :class="{ 'is-open': isToolsOpen }"
+          aria-controls="tree-tools"
+          :aria-expanded="isToolsOpen"
+          :title="isToolsOpen ? 'Ẩn công cụ' : 'Công cụ: thu phóng, mở rộng, tìm kiếm, in, Full view'"
+          @click="toggleTools"
+        >
+          <span class="btn-icon tools-icon" aria-hidden="true">{{ isToolsOpen ? '✕' : '☰' }}</span>
+          <span class="tools-label">{{ isToolsOpen ? 'Ẩn' : 'Công cụ' }}</span>
         </button>
       </div>
     </div>
@@ -2108,8 +2136,7 @@ onBeforeUnmount(() => {
 }
 
 .full-view-active .view-controls {
-  /* sit just under the sticky notification bar instead of covering it */
-  top: var(--anniv-h, 0px);
+  top: 0;
   padding: 0.5rem 0;
   background: rgba(255, 248, 234, 0.92);
 }
@@ -2123,6 +2150,44 @@ onBeforeUnmount(() => {
 .print-menu-wrap {
   position: relative;
   display: inline-flex;
+}
+
+.tools-tray {
+  display: flex;
+  gap: 0.5rem;
+  transform-origin: right center;
+}
+
+.tools-tray-enter-active,
+.tools-tray-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.tools-tray-enter-from,
+.tools-tray-leave-to {
+  opacity: 0;
+  transform: translateX(12px) scaleX(0.92);
+}
+
+.tools-toggle {
+  gap: 0.1rem;
+}
+
+.tools-toggle.is-open {
+  background: #7a1d16;
+  border-color: #7a1d16;
+  color: #fff3d0;
+}
+
+.tools-toggle.is-open:hover {
+  background: #8f2419;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tools-tray-enter-active,
+  .tools-tray-leave-active {
+    transition: none;
+  }
 }
 
 .print-menu {
@@ -2298,15 +2363,57 @@ onBeforeUnmount(() => {
   overscroll-behavior-x: contain;
 }
 
-/* Ngày giỗ notification, pinned at the top of the frame while the tree scrolls sideways */
+/* Block 1 (above the gia phả): ngày giỗ bar + đám giỗ / Lễ Tết lists */
+.anniversary-panel {
+  margin: 0 0 1rem;
+  padding: 0.6rem;
+  background: linear-gradient(180deg, #f8ecd0, #f1e2bf);
+  border: 2px solid #c9a24a;
+  border-radius: 12px;
+  box-shadow:
+    inset 0 0 0 3px #f8ecd0,
+    inset 0 0 0 4px rgba(155, 58, 36, 0.35),
+    0 8px 18px rgba(60, 20, 8, 0.18);
+}
+
 .tree-anniversary {
+  margin: 0 0 0.6rem;
+  max-width: none;
+}
+
+.tree-anniversary-list {
+  margin-bottom: 0;
+}
+
+@media (max-width: 640px) {
+  .anniversary-panel {
+    padding: 0.4rem;
+    border-radius: 10px;
+  }
+}
+
+/* Name of block 2, centred in the frame (stays put while the tree scrolls sideways) */
+.tree-block-title {
   position: sticky;
   left: 0;
-  top: 0;
-  /* above the totals, buttons and branch bar that scroll up underneath it */
-  z-index: 12;
-  margin: 0 0 0.8rem;
-  max-width: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  margin: 0 0 0.7rem;
+  font-family: 'Noto Serif', Georgia, serif;
+  font-size: clamp(1.15rem, 2.4vw, 1.5rem);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #7a1d16;
+}
+
+.tree-block-title::before,
+.tree-block-title::after {
+  content: '';
+  width: min(120px, 18vw);
+  border-top: 1px solid #c9a24a;
 }
 
 /* Totals strip */
@@ -2414,6 +2521,10 @@ onBeforeUnmount(() => {
     width: 100%;
     justify-content: flex-end;
     flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .tools-tray {
     gap: 0.4rem;
   }
 

@@ -115,6 +115,13 @@ export const getUpcomingAnniversaries = (
 export const formatSolarDate = (date: Date): string =>
   `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`
 
+/** Number of days from today until the same date `months` months later (e.g. 13/10 → 13/01). */
+export const daysInNextMonths = (months: number, from = new Date()): number => {
+  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate())
+  const end = new Date(start.getFullYear(), start.getMonth() + months, start.getDate())
+  return Math.round((end.getTime() - start.getTime()) / 86400000)
+}
+
 const WEEKDAYS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
 export const weekdayName = (date: Date): string => WEEKDAYS[date.getDay()]
 

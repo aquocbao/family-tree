@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { FamilyMember } from '../types/family'
 import type { LunarEvent } from '../utils/lunar-events'
 import { memorialPlaceLabel } from '../utils/memorial'
-import { formatSolarDate, getUpcomingAnniversaries, getUpcomingLunarEvents, weekdayName } from '../utils/anniversary'
+import { daysInNextMonths, formatSolarDate, getUpcomingAnniversaries, getUpcomingLunarEvents, weekdayName } from '../utils/anniversary'
 
 const props = withDefaults(
   defineProps<{
@@ -28,13 +28,7 @@ const emit = defineEmits<{
   select: [id: string]
 }>()
 
-// Number of days from today until the same date `months` months later (e.g. 13/10 → 13/01).
-const windowDays = computed(() => {
-  const today = new Date()
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  const end = new Date(start.getFullYear(), start.getMonth() + props.months, start.getDate())
-  return Math.round((end.getTime() - start.getTime()) / 86400000)
-})
+const windowDays = computed(() => daysInNextMonths(props.months))
 
 const upcoming = computed(() =>
   getUpcomingAnniversaries(
