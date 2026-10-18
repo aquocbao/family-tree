@@ -965,7 +965,7 @@ const setMode = (nextMode: AppMode): void => {
   }
 
   const nextPath =
-    nextMode === 'admin' ? ADMIN_PATH : nextMode === 'super-admin' ? SUPER_ADMIN_PATH : '/view'
+    nextMode === 'admin' ? ADMIN_PATH : nextMode === 'super-admin' ? SUPER_ADMIN_PATH : '/'
   void router.push(nextPath)
 }
 

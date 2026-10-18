@@ -5,12 +5,9 @@ import { ADMIN_PATH, SUPER_ADMIN_PATH } from './admin-paths'
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
+    // The public page lives at the site root
     {
       path: '/',
-      redirect: '/view',
-    },
-    {
-      path: '/view',
       name: 'view',
       component: App,
     },
@@ -24,9 +21,10 @@ export const router = createRouter({
       name: 'super-admin',
       component: App,
     },
+    // Old /view links and unknown paths → the public page
     {
       path: '/:pathMatch(.*)*',
-      redirect: '/view',
+      redirect: '/',
     },
   ],
 })
