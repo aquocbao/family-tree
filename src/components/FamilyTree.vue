@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, provide, ref, watch, type Ref } from 'vue'
 import AnniversaryBar from './AnniversaryBar.vue'
 import AnniversaryList from './AnniversaryList.vue'
 import FamilyTreeNode from './FamilyTreeNode.vue'
@@ -45,6 +45,31 @@ const selectedUnitKey = ref<string | null>(null)
 const lineageKey = ref<string | null>(null)
 /** the person whose "Chọn" was clicked (their card shows "Bỏ chọn") */
 const lineageMemberId = ref<string | null>(null)
+
+/* "Mặc định" (★ on a card): this browser opens the tree on that person. Kept in localStorage. */
+const DEFAULT_MEMBER_KEY = 'gia-pha-default-member'
+const readDefaultMember = (): string | null => {
+  try {
+    return localStorage.getItem(DEFAULT_MEMBER_KEY)
+  } catch {
+    return null
+  }
+}
+const defaultMemberId = ref<string | null>(readDefaultMember())
+const toggleDefaultMember = (memberId: string): void => {
+  defaultMemberId.value = defaultMemberId.value === memberId ? null : memberId
+  try {
+    if (defaultMemberId.value) {
+      localStorage.setItem(DEFAULT_MEMBER_KEY, defaultMemberId.value)
+    } else {
+      localStorage.removeItem(DEFAULT_MEMBER_KEY)
+    }
+  } catch {
+    // private mode / storage blocked: works until the page is reloaded
+  }
+}
+// Admin pages have no door (no provider) → always open
+const gateOpen = inject<Ref<boolean>>('gateOpen', ref(true))
 const treeWrapperRef = ref<HTMLElement | null>(null)
 
 const isFullView = ref(false)
@@ -761,6 +786,8 @@ provide('familyMemberById', getMemberById)
 // "In" button on every card: open the print chooser for that person
 provide('selectLineage', (memberId: string) => selectLineage(memberId))
 provide('lineageMemberId', lineageMemberId)
+provide('defaultMemberId', defaultMemberId)
+provide('toggleDefaultMember', toggleDefaultMember)
 provide(
   'showMemorialPlace',
   computed(() => props.showMemorialPlace),
@@ -1597,6 +1624,22 @@ watch(zoom, () => {
   void centerOnRoot()
   scheduleInLawLinks()
 })
+
+// On load, open the tree on this browser's default person (★) once the tree can be seen (door open, data in).
+// Runs once, a moment after the initial centring so it isn't scrolled back to the top.
+let hasFocusedDefault = false
+watch(
+  [gateOpen, () => units.value.memberToUnitKey],
+  ([open, memberToUnitKey]) => {
+    const id = defaultMemberId.value
+    if (hasFocusedDefault || !open || !id || !memberToUnitKey.has(id)) {
+      return
+    }
+    hasFocusedDefault = true
+    setTimeout(() => void goToMember(id), 400)
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   if (canvasRef.value) {

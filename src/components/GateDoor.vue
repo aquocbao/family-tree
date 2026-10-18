@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, provide, ref } from 'vue'
 import { LOI_NGO_PARAGRAPHS, LOI_NGO_SIGN } from '../data/loi-ngo'
 
 /**
@@ -21,6 +21,11 @@ type GateState = 'closed' | 'unlocking' | 'opening' | 'welcome' | 'open'
 const state = ref<GateState>(readOpened() ? 'open' : 'closed')
 // Admin pages (enabled = false) never show the door
 const shown = computed<GateState>(() => (props.enabled ? state.value : 'open'))
+// Lets the tree wait until it can be seen (e.g. before scrolling to the default person)
+provide(
+  'gateOpen',
+  computed(() => shown.value === 'open'),
+)
 const timers: number[] = []
 
 const welcomeRef = ref<HTMLElement | null>(null)

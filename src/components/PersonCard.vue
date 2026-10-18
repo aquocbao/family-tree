@@ -79,6 +79,10 @@ const lunarDeathDate = computed(
 const selectLineage = inject<((id: string) => void) | undefined>('selectLineage', undefined)
 const lineageMemberId = inject<Ref<string | null> | undefined>('lineageMemberId', undefined)
 const isChosen = computed(() => lineageMemberId?.value === props.member.id)
+// ★ "Mặc định": the tree opens on this person next time (this browser only)
+const toggleDefaultMember = inject<((id: string) => void) | undefined>('toggleDefaultMember', undefined)
+const defaultMemberId = inject<Ref<string | null> | undefined>('defaultMemberId', undefined)
+const isDefault = computed(() => defaultMemberId?.value === props.member.id)
 const memberById = inject<(id?: string) => FamilyMember | undefined>('familyMemberById', () => undefined)
 const showMemorialPlaceSetting = inject<Ref<boolean> | undefined>('showMemorialPlace', undefined)
 const memorialPlace = computed(() =>
@@ -181,6 +185,22 @@ const formatDate = (value?: string): string => {
           @click="selectLineage(member.id)"
         >
           {{ isChosen ? 'Bỏ chọn' : 'Chọn' }}
+        </button>
+        <button
+          v-if="toggleDefaultMember"
+          type="button"
+          class="default-member"
+          :class="{ 'is-default': isDefault }"
+          :aria-pressed="isDefault"
+          :aria-label="isDefault ? 'Bỏ người mặc định' : 'Đặt làm người mặc định'"
+          :title="
+            isDefault
+              ? 'Người mặc định: mỗi lần mở trang, cây sẽ tự đến người này. Nhấn để bỏ.'
+              : 'Đặt làm người mặc định: mỗi lần mở trang (trên máy này), cây sẽ tự đến người này'
+          "
+          @click="toggleDefaultMember(member.id)"
+        >
+          {{ isDefault ? '★' : '☆' }}
         </button>
 
         <template v-if="canManage">
@@ -325,6 +345,24 @@ const formatDate = (value?: string): string => {
 
 .lineage.is-chosen:hover {
   background: #7e1f14;
+}
+
+.default-member {
+  border: 1px solid #c9a24a;
+  background: #fff8e6;
+  color: #b8892f;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.default-member:hover {
+  background: #fbe9bf;
+}
+
+.default-member.is-default {
+  border-color: #b8892f;
+  background: #c9a24a;
+  color: #fff;
 }
 
 .edit {
