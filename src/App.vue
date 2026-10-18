@@ -1545,14 +1545,13 @@ onMounted(async () => {
       </section>
     </div>
 
-    <!-- View page: the Lời ngỏ is its own page after the door opens (GateDoor), so the card is only for admins -->
-    <LoiNgo v-if="isEditableMode" />
-
     <p v-if="isLoading" class="status-message">Đang tải dữ liệu từ file JSON...</p>
     <p v-else-if="loadingError" class="status-message error">{{ loadingError }}</p>
 
     <!-- View page: the tree sits behind a closed door; click the lock to open it -->
     <GateDoor :enabled="!isEditableMode">
+    <!-- Behind the door too: shown (collapsed) once the visitor has gone in, never over the door or the Lời ngỏ page -->
+    <LoiNgo />
     <FamilyTree
       :members="members"
       :can-manage="isEditableMode"
