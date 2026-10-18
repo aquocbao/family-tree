@@ -239,7 +239,8 @@ const formatDate = (value?: string): string => {
   padding: 1rem;
   /* Card grows to fit the full name on one line */
   width: max-content;
-  min-width: 200px;
+  /* wide enough for Xem chi tiết · Chọn · ☆ on one line */
+  min-width: 250px;
   box-shadow: 0 2px 8px rgba(24, 39, 75, 0.06);
 }
 

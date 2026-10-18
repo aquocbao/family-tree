@@ -70,6 +70,32 @@ const openGate = (): void => {
   timers.push(window.setTimeout(() => void showWelcome(), 550 + 1700))
 }
 
+// "✕" on the gia phả: close the doors again and go back to the first page (the lock)
+const closeGate = async (): Promise<void> => {
+  timers.forEach((id) => clearTimeout(id))
+  timers.length = 0
+  if (document.fullscreenElement) {
+    try {
+      await document.exitFullscreen()
+    } catch {
+      // still close the doors
+    }
+  }
+  try {
+    sessionStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // private mode: nothing stored
+  }
+  state.value = 'closed'
+  await nextTick()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+// Only on the view page (admin pages have no door)
+provide(
+  'closeGate',
+  computed(() => (props.enabled ? closeGate : null)),
+)
+
 onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
 </script>
 

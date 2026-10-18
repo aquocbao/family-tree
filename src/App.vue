@@ -16,6 +16,7 @@ const APP_VERSION_LABEL = (() => {
 })()
 import { fetchFamilyDatabase, saveFamilyDatabase } from './data/family-db-api'
 import { solarDateTextToLunarText } from './utils/lunar'
+import { formatSolarDate, getUpcomingLunarEvents } from './utils/anniversary'
 import { isDeceased as isDeceasedMember } from './utils/memorial'
 import { spouseIdsOf } from './utils/spouses'
 import {
@@ -73,7 +74,7 @@ const emptyForm = (): MemberForm => ({
   deathDate: '',
   deathDateLunar: '',
   memorialHostId: '',
-  gender: 'other',
+  gender: 'male',
   fatherId: '',
   motherId: '',
   spouseIds: [''],
@@ -316,6 +317,16 @@ const resetForm = (): void => {
 const startAddMember = (): void => {
   resetForm()
 }
+
+const GENDER_OPTIONS: { value: FamilyGender; label: string }[] = [
+  { value: 'male', label: 'Nam' },
+  { value: 'female', label: 'Nữ' },
+  { value: 'other', label: 'Khác' },
+]
+
+const editingMemberName = computed(
+  () => members.value.find((member) => member.id === editingId.value)?.name ?? form.value.name,
+)
 
 const editorPanelRef = ref<HTMLElement | null>(null)
 const nameInputRef = ref<HTMLInputElement | null>(null)
@@ -1108,6 +1119,33 @@ const lunarEventsDirty = computed(() => {
   return JSON.stringify(draft) !== JSON.stringify(saved)
 })
 
+// "Lần tới" column: next date of each draft row (one pass over the coming year for all rows)
+const nextEventDates = computed(() => {
+  const byDraft = new Map<LunarEventDraft, Date>()
+  const eventToDraft = new Map<LunarEvent, LunarEventDraft>()
+  for (const draft of lunarEventsDraft.value) {
+    const lastDay = draft.calendar === 'lunar' && draft.lastDayOfMonth
+    const event: LunarEvent = {
+      name: draft.name.trim() || '?',
+      day: lastDay ? 30 : Number(draft.day),
+      month: Number(draft.month),
+      ...(draft.calendar === 'solar' ? { calendar: 'solar' as const } : {}),
+      ...(lastDay ? { lastDayOfMonth: true } : {}),
+    }
+    if (isValidLunarEvent(event)) eventToDraft.set(event, draft)
+  }
+  for (const upcoming of getUpcomingLunarEvents(new Date(), 400, [...eventToDraft.keys()])) {
+    const draft = eventToDraft.get(upcoming.event)
+    if (draft && !byDraft.has(draft)) byDraft.set(draft, upcoming.date)
+  }
+  return byDraft
+})
+
+const nextEventDateLabel = (draft: LunarEventDraft): string => {
+  const date = nextEventDates.value.get(draft)
+  return date ? formatSolarDate(date) : '—'
+}
+
 const addLunarEvent = (): void => {
   lunarEventsMessage.value = ''
   lunarEventsDraft.value.push({ name: '', day: 1, month: 1, calendar: 'lunar', lastDayOfMonth: false })
@@ -1295,240 +1333,303 @@ onMounted(async () => {
       <section
         ref="editorPanelRef"
         class="editor-panel"
-        :class="{ 'editor-panel--flash': isEditorFlashing }"
+        :class="{ 'editor-panel--flash': isEditorFlashing, 'editor-panel--editing': isEditing }"
       >
-        <h2>{{ isEditing ? 'Chỉnh sửa thành viên' : 'Thêm thành viên' }}</h2>
+        <header class="panel-head">
+          <div>
+            <h2>{{ isEditing ? 'Chỉnh sửa thành viên' : 'Thêm thành viên' }}</h2>
+            <p v-if="isEditing" class="panel-sub">
+              Đang sửa: <strong>{{ editingMemberName }}</strong> <code>{{ editingId }}</code>
+            </p>
+            <p v-else class="panel-sub">Điền thông tin rồi nhấn "Thêm thành viên". Trường có dấu <span class="req">*</span> là bắt buộc.</p>
+          </div>
+          <button v-if="isEditing" type="button" class="panel-head-btn" :disabled="isSaving" @click="startAddMember">
+            ＋ Thêm người mới
+          </button>
+        </header>
 
         <form class="member-form" @submit.prevent="saveMember">
-        <label>
-          ID
-          <input
-            v-model="form.id"
-            type="text"
-            required
-            :disabled="isSaving"
-            :readonly="isEditing"
-            :class="{ 'is-locked': isEditing }"
-            :title="isEditing ? 'Không thể đổi ID khi chỉnh sửa' : undefined"
-          />
-          <small v-if="isEditing" class="field-hint">ID không thể thay đổi khi chỉnh sửa.</small>
-        </label>
+          <fieldset class="form-section">
+            <legend>Thông tin chung</legend>
+            <div class="form-grid">
+              <label class="field field--wide">
+                <span class="field-label">Họ và tên <span class="req">*</span></span>
+                <input
+                  ref="nameInputRef"
+                  v-model="form.name"
+                  type="text"
+                  required
+                  placeholder="Ví dụ: PHẠM VĂN AN"
+                  :disabled="isSaving"
+                />
+              </label>
 
-        <label>
-          Tên
-          <input ref="nameInputRef" v-model="form.name" type="text" required :disabled="isSaving" />
-        </label>
+              <div class="field" role="radiogroup" aria-label="Giới tính">
+                <span class="field-label">Giới tính</span>
+                <div class="segmented">
+                  <label v-for="option in GENDER_OPTIONS" :key="option.value" :class="{ 'is-on': form.gender === option.value }">
+                    <input v-model="form.gender" type="radio" name="member-gender" :value="option.value" :disabled="isSaving" />
+                    {{ option.label }}
+                  </label>
+                </div>
+              </div>
 
-        <label>
-          Vị trí (trái → phải)
-          <input
-            v-model="form.position"
-            type="number"
-            min="0"
-            step="1"
-            placeholder="Ví dụ: 1, 2, 3..."
-            :disabled="isSaving"
-          />
-        </label>
+              <label class="field">
+                <span class="field-label">Mã (ID) <span class="req">*</span></span>
+                <input
+                  v-model="form.id"
+                  type="text"
+                  required
+                  placeholder="Ví dụ: PVAN"
+                  :disabled="isSaving"
+                  :readonly="isEditing"
+                  :class="{ 'is-locked': isEditing }"
+                  :title="isEditing ? 'Không thể đổi ID khi chỉnh sửa' : undefined"
+                />
+                <small class="field-hint">{{ isEditing ? 'Không thể đổi ID khi chỉnh sửa.' : 'Mã ngắn, không trùng với người khác.' }}</small>
+              </label>
 
-        <label>
-          Ngày sinh
-          <input
-            v-model="form.birthDate"
-            type="text"
-            inputmode="numeric"
-            placeholder="dd-mm-yyyy hoặc ddmmyyyy"
-            :disabled="isSaving"
-            @blur="formatDateInputField('birthDate')"
-          />
-        </label>
+              <label class="field">
+                <span class="field-label">Thứ tự trong anh chị em</span>
+                <input
+                  v-model="form.position"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="1, 2, 3…"
+                  :disabled="isSaving"
+                />
+                <small class="field-hint">Xếp từ trái sang phải. Để trống: xếp theo ngày sinh.</small>
+              </label>
+            </div>
+          </fieldset>
 
-        <label>
-          Ngày mất
-          <input
-            v-model="form.deathDate"
-            type="text"
-            inputmode="numeric"
-            placeholder="dd-mm-yyyy hoặc ddmmyyyy"
-            :disabled="isSaving"
-            @blur="formatDateInputField('deathDate')"
-          />
-        </label>
+          <fieldset class="form-section">
+            <legend>Ngày sinh · ngày mất</legend>
+            <div class="form-grid">
+              <label class="field">
+                <span class="field-label">Ngày sinh</span>
+                <input
+                  v-model="form.birthDate"
+                  type="text"
+                  inputmode="numeric"
+                  placeholder="dd-mm-yyyy"
+                  :disabled="isSaving"
+                  @blur="formatDateInputField('birthDate')"
+                />
+                <small class="field-hint">Có thể gõ liền: 15031950.</small>
+              </label>
 
-        <label>
-          Ngày mất (âm lịch)
-          <input
-            v-model="form.deathDateLunar"
-            type="text"
-            :placeholder="autoLunarDeathDate ? `Tự tính: ${autoLunarDeathDate}` : 'Ví dụ: 15-03-2024 hoặc 15 tháng 3 năm Giáp Thìn'"
-            :disabled="isSaving"
-          />
-          <small class="field-hint">
-            {{
-              autoLunarDeathDate
-                ? 'Để trống để dùng ngày âm lịch tự tính từ ngày mất.'
-                : 'Nhập khi chỉ biết ngày giỗ âm lịch.'
-            }}
-          </small>
-        </label>
+              <label class="field">
+                <span class="field-label">Ngày mất (dương lịch)</span>
+                <input
+                  v-model="form.deathDate"
+                  type="text"
+                  inputmode="numeric"
+                  placeholder="dd-mm-yyyy"
+                  :disabled="isSaving"
+                  @blur="formatDateInputField('deathDate')"
+                />
+              </label>
 
-        <label class="checkbox-field deceased-field">
-          <input v-model="form.deceased" type="checkbox" :disabled="isSaving" />
-          <span>
-            Đã mất (không rõ ngày mất)
-            <small class="field-hint">Đánh dấu khi người này đã mất nhưng không biết ngày mất.</small>
-          </span>
-        </label>
+              <label class="field">
+                <span class="field-label">Ngày giỗ (âm lịch)</span>
+                <input
+                  v-model="form.deathDateLunar"
+                  type="text"
+                  :placeholder="autoLunarDeathDate ? `Tự tính: ${autoLunarDeathDate}` : 'Ví dụ: 15-03'"
+                  :disabled="isSaving"
+                />
+                <small class="field-hint">
+                  {{ autoLunarDeathDate ? 'Để trống để dùng ngày tự tính từ ngày mất.' : 'Nhập khi chỉ biết ngày giỗ âm lịch.' }}
+                </small>
+              </label>
 
-        <label>
-          Đám giỗ tại
-          <SearchableMemberSelect
-            v-model="form.memorialHostId"
-            list-id="memorial-host-members"
-            :members="livingMembers"
-            placeholder="Chọn người còn sống"
-            :disabled="isSaving"
-          />
-        </label>
+              <label class="field">
+                <span class="field-label">Đám giỗ tổ chức tại nhà</span>
+                <SearchableMemberSelect
+                  v-model="form.memorialHostId"
+                  list-id="memorial-host-members"
+                  :members="livingMembers"
+                  placeholder="Chọn người còn sống"
+                  :disabled="isSaving"
+                />
+              </label>
 
-        <label>
-          Giới tính
-          <select v-model="form.gender" :disabled="isSaving">
-            <option value="female">Nữ</option>
-            <option value="male">Nam</option>
-            <option value="other">Khác</option>
-          </select>
-        </label>
+              <label class="check-row field--full">
+                <input v-model="form.deceased" type="checkbox" :disabled="isSaving" />
+                <span>
+                  Đã mất, không rõ ngày mất
+                  <small class="field-hint">Đánh dấu khi người này đã mất nhưng không biết ngày mất.</small>
+                </span>
+              </label>
+            </div>
+          </fieldset>
 
-        <label>
-          Cha
-          <SearchableMemberSelect
-            v-model="form.fatherId"
-            list-id="father-members"
-            :members="selectableMembers"
-            :disabled="isSaving"
-          />
-        </label>
+          <fieldset class="form-section">
+            <legend>Gia đình</legend>
+            <div class="form-grid">
+              <label class="field">
+                <span class="field-label">Cha</span>
+                <SearchableMemberSelect
+                  v-model="form.fatherId"
+                  list-id="father-members"
+                  :members="selectableMembers"
+                  :disabled="isSaving"
+                />
+              </label>
 
-        <label>
-          Mẹ
-          <SearchableMemberSelect
-            v-model="form.motherId"
-            list-id="mother-members"
-            :members="selectableMembers"
-            :disabled="isSaving"
-          />
-        </label>
+              <label class="field">
+                <span class="field-label">Mẹ</span>
+                <SearchableMemberSelect
+                  v-model="form.motherId"
+                  list-id="mother-members"
+                  :members="selectableMembers"
+                  :disabled="isSaving"
+                />
+              </label>
 
-        <fieldset class="spouse-list">
-          <legend>Vợ/Chồng <small>(theo thứ tự: 1, 2, 3…)</small></legend>
-          <div v-for="(_, index) in form.spouseIds" :key="index" class="spouse-list-row">
-            <span class="spouse-list-label">{{ spouseRowLabel(index) }}</span>
-            <SearchableMemberSelect
-              v-model="form.spouseIds[index]"
-              :list-id="`spouse-members-${index}`"
-              :members="selectableMembers"
-              :disabled="isSaving"
-            />
-            <button
-              type="button"
-              class="spouse-list-remove"
-              :disabled="isSaving"
-              :aria-label="`Bỏ ${spouseRowLabel(index)}`"
-              @click="removeSpouseRow(index)"
-            >
-              ✕
+              <div class="field field--full spouse-list">
+                <span class="field-label">Vợ/Chồng <small class="field-hint">theo thứ tự cưới: 1, 2, 3…</small></span>
+                <div v-for="(_, index) in form.spouseIds" :key="index" class="spouse-list-row">
+                  <span class="spouse-list-label">{{ spouseRowLabel(index) }}</span>
+                  <SearchableMemberSelect
+                    v-model="form.spouseIds[index]"
+                    :list-id="`spouse-members-${index}`"
+                    :members="selectableMembers"
+                    :disabled="isSaving"
+                  />
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn--danger"
+                    :disabled="isSaving"
+                    :aria-label="`Bỏ ${spouseRowLabel(index)}`"
+                    :title="`Bỏ ${spouseRowLabel(index)}`"
+                    @click="removeSpouseRow(index)"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <button type="button" class="dashed-btn" :disabled="isSaving" @click="addSpouseRow">
+                  ＋ Thêm vợ/chồng
+                </button>
+              </div>
+
+              <label class="check-row field--full">
+                <input v-model="form.spouseOnRight" type="checkbox" :disabled="isSaving" />
+                <span>Thành viên này đứng bên phải trong cặp vợ chồng</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn--primary" :disabled="isSaving">
+              {{ isSaving ? 'Đang lưu...' : isEditing ? 'Lưu thay đổi' : 'Thêm thành viên' }}
             </button>
+            <button type="button" class="btn" :disabled="isSaving" @click="startAddMember">
+              {{ isEditing ? 'Hủy sửa' : 'Xóa trắng' }}
+            </button>
+            <span class="form-actions-note">Lưu vào bản chờ duyệt.</span>
           </div>
-          <button type="button" class="spouse-list-add" :disabled="isSaving" @click="addSpouseRow">
-            + Thêm vợ/chồng
-          </button>
-        </fieldset>
-
-        <label class="checkbox-field">
-          <input v-model="form.spouseOnRight" type="checkbox" :disabled="isSaving" />
-          Thành viên này nằm bên phải trong cặp vợ/chồng
-        </label>
-
-        <p v-if="formError" class="form-error">{{ formError }}</p>
-
-        <div class="form-actions">
-          <button type="submit" :disabled="isSaving">
-            {{ isSaving ? 'Đang lưu...' : isEditing ? 'Lưu thay đổi' : 'Thêm thành viên' }}
-          </button>
-          <button type="button" class="secondary" :disabled="isSaving" @click="startAddMember">
-            Làm mới
-          </button>
-        </div>
         </form>
       </section>
 
       <section class="settings-panel">
-        <h2>Cài đặt</h2>
-        <p class="settings-help">Tùy chỉnh cách hiển thị cây gia phả.</p>
+        <header class="panel-head">
+          <div>
+            <h2>Cài đặt hiển thị</h2>
+            <p class="panel-sub">Lưu ngay khi thay đổi (vào bản chờ duyệt).</p>
+          </div>
+        </header>
 
-        <label class="setting-toggle">
-          <input v-model="showBirthDate" type="checkbox" />
-          Hiển thị ngày sinh
-        </label>
-        <label class="setting-toggle">
-          <input v-model="showDeathDate" type="checkbox" />
-          Hiển thị ngày mất
-        </label>
-        <label class="setting-toggle">
-          <input v-model="showSpouseInfo" type="checkbox" />
-          Hiển thị vợ/chồng
-        </label>
-        <label class="setting-toggle">
-          <input v-model="showViewDetailAction" type="checkbox" />
-          Hiển thị nút xem chi tiết
-        </label>
-        <label class="setting-toggle">
-          <input v-model="showMemorialPlace" type="checkbox" />
-          Hiển thị nơi tổ chức đám giỗ
-        </label>
+        <div class="switch-list">
+          <label class="switch-row">
+            <span>Ngày sinh</span>
+            <input v-model="showBirthDate" type="checkbox" class="switch" />
+          </label>
+          <label class="switch-row">
+            <span>Ngày mất</span>
+            <input v-model="showDeathDate" type="checkbox" class="switch" />
+          </label>
+          <label class="switch-row">
+            <span>Vợ/chồng</span>
+            <input v-model="showSpouseInfo" type="checkbox" class="switch" />
+          </label>
+          <label class="switch-row">
+            <span>Nút "Xem chi tiết"</span>
+            <input v-model="showViewDetailAction" type="checkbox" class="switch" />
+          </label>
+          <label class="switch-row">
+            <span>Nơi tổ chức đám giỗ</span>
+            <input v-model="showMemorialPlace" type="checkbox" class="switch" />
+          </label>
+        </div>
+
         <label class="setting-select">
-          Thanh thông báo (ngày giỗ, Lễ Tết) hiển thị trong
+          <span class="field-label">Thanh thông báo (ngày giỗ, Lễ Tết)</span>
           <select v-model.number="notificationMonths">
-            <option :value="0">Tắt thanh thông báo</option>
-            <option :value="1">1 tháng tới</option>
-            <option :value="2">2 tháng tới</option>
-            <option :value="3">3 tháng tới</option>
-            <option :value="4">4 tháng tới</option>
-            <option :value="6">6 tháng tới</option>
-
+            <option :value="0">Tắt</option>
+            <option :value="1">Hiện sự kiện trong 1 tháng tới</option>
+            <option :value="2">Hiện sự kiện trong 2 tháng tới</option>
+            <option :value="3">Hiện sự kiện trong 3 tháng tới</option>
+            <option :value="4">Hiện sự kiện trong 4 tháng tới</option>
+            <option :value="6">Hiện sự kiện trong 6 tháng tới</option>
           </select>
         </label>
+      </section>
 
-        <div class="lunar-events-editor">
-          <h3>Lễ Tết trên thanh thông báo</h3>
-          <p class="settings-help">
-            Mỗi sự kiện chọn theo âm lịch hoặc dương lịch. Ô "Cuối" = ngày cuối tháng âm lịch (29 hoặc 30), ví dụ Giao thừa.
-          </p>
-          <div class="lunar-events-head" aria-hidden="true">
-            <span>Lịch</span><span>Ngày</span><span>Tháng</span><span>Cuối</span><span></span>
+      <section class="events-panel">
+        <header class="panel-head">
+          <div>
+            <h2>
+              Lễ Tết trên thanh thông báo
+              <span v-if="lunarEventsDirty" class="dirty-badge">Chưa lưu</span>
+            </h2>
+            <p class="panel-sub">
+              {{ lunarEventsDraft.length }} sự kiện. "Cuối tháng" = ngày cuối tháng âm lịch (29 hoặc 30), ví dụ Giao thừa.
+            </p>
           </div>
-          <div v-for="(event, index) in lunarEventsDraft" :key="index" class="lunar-event-row">
+        </header>
+
+        <div class="events-table" role="table" aria-label="Danh sách Lễ Tết">
+          <div class="events-head" role="row">
+            <span role="columnheader">Tên sự kiện</span>
+            <span role="columnheader">Lịch</span>
+            <span role="columnheader">Ngày</span>
+            <span role="columnheader">Tháng</span>
+            <span role="columnheader">Cuối tháng</span>
+            <span role="columnheader">Lần tới</span>
+            <span role="columnheader"><span class="sr-only">Xóa</span></span>
+          </div>
+          <div
+            v-for="(event, index) in lunarEventsDraft"
+            :key="index"
+            class="event-row"
+            :class="`is-${event.calendar}`"
+            role="row"
+          >
             <input
               v-model="event.name"
               type="text"
-              class="lunar-event-name"
+              class="event-name"
               :maxlength="MAX_LUNAR_EVENT_NAME"
               placeholder="Tên sự kiện"
               aria-label="Tên sự kiện"
             />
-            <select
-              v-model="event.calendar"
-              class="lunar-event-calendar"
-              :class="`is-${event.calendar}`"
-              aria-label="Loại lịch"
-            >
-              <option value="lunar">Âm lịch</option>
-              <option value="solar">Dương lịch</option>
-            </select>
+            <div class="segmented segmented--sm" role="radiogroup" aria-label="Loại lịch">
+              <label :class="{ 'is-on': event.calendar === 'lunar' }">
+                <input v-model="event.calendar" type="radio" :name="`event-cal-${index}`" value="lunar" />Âm
+              </label>
+              <label :class="{ 'is-on': event.calendar === 'solar' }">
+                <input v-model="event.calendar" type="radio" :name="`event-cal-${index}`" value="solar" />Dương
+              </label>
+            </div>
             <input
               v-model.number="event.day"
               type="number"
+              class="event-num event-day"
               min="1"
               :max="event.calendar === 'solar' ? 31 : 30"
               :disabled="event.calendar === 'lunar' && event.lastDayOfMonth"
@@ -1537,34 +1638,43 @@ onMounted(async () => {
             <input
               v-model.number="event.month"
               type="number"
+              class="event-num event-month"
               min="1"
               max="12"
               :aria-label="event.calendar === 'solar' ? 'Tháng dương lịch' : 'Tháng âm lịch'"
             />
-            <label
-              class="lunar-event-last"
-              :class="{ 'is-disabled': event.calendar === 'solar' }"
-              title="Ngày cuối tháng âm lịch (29 hoặc 30), ví dụ Giao thừa"
-            >
-              <input v-model="event.lastDayOfMonth" type="checkbox" :disabled="event.calendar === 'solar'" />
-              <span class="lunar-event-last-text">Cuối</span>
+            <label v-if="event.calendar === 'lunar'" class="event-last" title="Ngày cuối tháng âm lịch (29 hoặc 30)">
+              <input v-model="event.lastDayOfMonth" type="checkbox" />
+              <span>Cuối tháng</span>
             </label>
-            <button type="button" class="lunar-event-remove" aria-label="Xóa sự kiện" @click="removeLunarEvent(index)">✕</button>
-          </div>
-          <p v-if="lunarEventsDraft.length === 0" class="settings-help">Chưa có sự kiện nào.</p>
-          <div class="lunar-events-actions">
-            <button type="button" class="lunar-btn" :disabled="lunarEventsDraft.length >= MAX_LUNAR_EVENTS" @click="addLunarEvent">
-              + Thêm sự kiện
+            <span v-else class="event-last event-last--none" aria-hidden="true">—</span>
+            <span class="event-next">{{ nextEventDateLabel(event) }}</span>
+            <button
+              type="button"
+              class="icon-btn icon-btn--danger"
+              :aria-label="`Xóa sự kiện ${event.name || index + 1}`"
+              :title="`Xóa sự kiện ${event.name || ''}`"
+              @click="removeLunarEvent(index)"
+            >
+              ✕
             </button>
-            <button type="button" class="lunar-btn" @click="restoreDefaultLunarEvents">Khôi phục mặc định</button>
-            <button type="button" class="lunar-btn" :disabled="!lunarEventsDirty" @click="resetLunarEventsDraft">Hủy thay đổi</button>
-            <button type="button" class="lunar-btn lunar-btn--primary" :disabled="!lunarEventsDirty || isSaving" @click="saveLunarEvents">
-              Lưu danh sách
-            </button>
           </div>
-          <p v-if="lunarEventsError" class="download-error">{{ lunarEventsError }}</p>
-          <p v-else-if="lunarEventsMessage" class="lunar-events-message">{{ lunarEventsMessage }}</p>
+          <p v-if="lunarEventsDraft.length === 0" class="panel-sub">Chưa có sự kiện nào.</p>
         </div>
+
+        <div class="events-actions">
+          <button type="button" class="dashed-btn" :disabled="lunarEventsDraft.length >= MAX_LUNAR_EVENTS" @click="addLunarEvent">
+            ＋ Thêm sự kiện
+          </button>
+          <button type="button" class="btn btn--ghost" @click="restoreDefaultLunarEvents">Khôi phục mặc định</button>
+          <span class="events-actions-spacer"></span>
+          <button type="button" class="btn" :disabled="!lunarEventsDirty" @click="resetLunarEventsDraft">Hủy thay đổi</button>
+          <button type="button" class="btn btn--primary" :disabled="!lunarEventsDirty || isSaving" @click="saveLunarEvents">
+            Lưu danh sách
+          </button>
+        </div>
+        <p v-if="lunarEventsError" class="form-error" role="alert">{{ lunarEventsError }}</p>
+        <p v-else-if="lunarEventsMessage" class="lunar-events-message">{{ lunarEventsMessage }}</p>
       </section>
     </div>
 
@@ -1914,118 +2024,6 @@ onMounted(async () => {
   }
 }
 
-.editor-panel h2 {
-  margin: 0 0 0.75rem;
-  color: #23345d;
-}
-
-.admin-panels {
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr);
-  gap: 1rem;
-  align-items: start;
-  margin-bottom: 1rem;
-}
-
-.settings-panel {
-  background: #ffffff;
-  border: 1px solid #d7dbe6;
-  border-radius: 16px;
-  padding: 1rem;
-}
-
-.settings-panel h2 {
-  margin: 0;
-  color: #23345d;
-}
-
-.settings-help {
-  margin: 0.4rem 0 0.75rem;
-  color: #5a6376;
-  font-weight: 600;
-}
-
-.setting-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  margin-bottom: 0.6rem;
-  font-weight: 600;
-  color: #2c3e63;
-}
-
-.setting-toggle input {
-  width: 16px;
-  height: 16px;
-}
-
-.member-form {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 0.75rem;
-}
-
-.member-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-weight: 600;
-  color: #2c3e63;
-}
-
-.member-form .checkbox-field {
-  flex-direction: row;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.member-form .checkbox-field input {
-  width: 16px;
-  height: 16px;
-}
-
-.member-form input,
-.member-form select {
-  border: 1px solid #becce8;
-  border-radius: 8px;
-  padding: 0.45rem 0.6rem;
-  font: inherit;
-}
-
-.form-actions {
-  grid-column: 1 / -1;
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
-}
-
-.form-actions button {
-  border-radius: 8px;
-  border: 1px solid #8ca7de;
-  background: #2f4678;
-  color: #fff;
-  cursor: pointer;
-  font-weight: 700;
-  padding: 0.5rem 0.85rem;
-}
-
-.form-actions button:disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-.form-actions .secondary {
-  background: #ffffff;
-  color: #2f4678;
-}
-
-.form-error {
-  grid-column: 1 / -1;
-  margin: 0.25rem 0 0;
-  color: #8f1d1d;
-  font-weight: 600;
-}
-
 .status-message {
   margin: 0 0 1rem;
   font-weight: 600;
@@ -2034,12 +2032,6 @@ onMounted(async () => {
 
 .status-message.error {
   color: #8f1d1d;
-}
-
-@media (max-width: 980px) {
-  .admin-panels {
-    grid-template-columns: 1fr;
-  }
 }
 
 .download-row {
@@ -2111,154 +2103,6 @@ onMounted(async () => {
 
 .download-error {
   color: #8f1d1d;
-  font-weight: 600;
-}
-
-.setting-select {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin-top: 0.75rem;
-  font-weight: 600;
-}
-
-.setting-select select {
-  max-width: 260px;
-  border: 1px solid #becce8;
-  border-radius: 8px;
-  padding: 0.4rem 0.55rem;
-  font: inherit;
-  font-weight: 400;
-  background: #fff;
-}
-
-.lunar-events-editor {
-  margin-top: 1rem;
-  padding-top: 0.9rem;
-  border-top: 1px dashed #d9c6a3;
-}
-
-.lunar-events-editor h3 {
-  margin: 0 0 0.5rem;
-  font-size: 1rem;
-  color: #23345d;
-}
-
-.lunar-events-head,
-.lunar-event-row {
-  display: grid;
-  /* name on its own line, then lịch · ngày · tháng · cuối · xóa */
-  grid-template-columns: minmax(7.4rem, 1fr) 3.1rem 3.1rem 3.4rem 2rem;
-  gap: 0.3rem 0.4rem;
-  align-items: center;
-}
-
-.lunar-event-row .lunar-event-name {
-  grid-column: 1 / -1;
-}
-
-.lunar-event-row {
-  padding-bottom: 0.35rem;
-  border-bottom: 1px dotted #e3d6bd;
-}
-
-.lunar-events-head {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #6b5a44;
-  margin-bottom: 0.25rem;
-}
-
-.lunar-event-row {
-  margin-bottom: 0.35rem;
-}
-
-.lunar-event-row input[type='text'],
-.lunar-event-row input[type='number'] {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid #becce8;
-  border-radius: 6px;
-  padding: 0.3rem 0.45rem;
-  font: inherit;
-}
-
-.lunar-event-calendar {
-  min-width: 0;
-  border: 1px solid #becce8;
-  border-radius: 6px;
-  padding: 0.3rem 0.35rem;
-  font: inherit;
-  background: #fff;
-}
-
-.lunar-event-calendar.is-lunar {
-  border-color: #d7b777;
-  background: #fff8e8;
-  color: #6b3d0c;
-}
-
-.lunar-event-calendar.is-solar {
-  border-color: #9fb9e6;
-  background: #f1f6ff;
-  color: #23345d;
-}
-
-.lunar-event-last.is-disabled {
-  opacity: 0.45;
-}
-
-.lunar-event-row input:disabled {
-  background: #f2f2f2;
-  color: #999;
-}
-
-.lunar-event-last {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.85rem;
-}
-
-.lunar-event-remove {
-  border: 1px solid #e3b4b4;
-  border-radius: 6px;
-  background: #fff5f5;
-  color: #8f1d1d;
-  cursor: pointer;
-  height: 1.9rem;
-}
-
-.lunar-events-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.5rem;
-}
-
-.lunar-btn {
-  border: 1px solid #8ca7de;
-  border-radius: 8px;
-  background: #fff;
-  color: #2f4678;
-  font-weight: 600;
-  padding: 0.35rem 0.7rem;
-  cursor: pointer;
-}
-
-.lunar-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.lunar-btn--primary {
-  background: #2f4678;
-  color: #fff;
-}
-
-.lunar-events-message {
-  margin: 0.4rem 0 0;
-  color: #2f6b2f;
   font-weight: 600;
 }
 
@@ -2481,84 +2325,197 @@ onMounted(async () => {
     align-items: stretch;
   }
 
-  /* 16px inputs stop iOS Safari from zooming in on focus */
-  .member-form input,
-  .member-form select,
-  .setting-select select,
-  .lunar-event-row input[type='text'],
-  .lunar-event-row input[type='number'],
-  .lunar-event-calendar {
-    font-size: 16px;
-  }
-
-  .form-actions {
-    flex-wrap: wrap;
-  }
-
-  .lunar-events-head {
-    display: none;
-  }
-
-  .lunar-event-row {
-    grid-template-columns: minmax(0, 1fr) 3.4rem 3.4rem 2rem 2rem;
-  }
-
-  .lunar-event-last-text {
-    display: none;
+  .events-panel {
+    padding: 0.85rem;
+    border-radius: 12px;
   }
 }
 
-.spouse-list {
-  /* a full row of the form: room for long names and several spouses */
+/* ---------- Admin panels: member form, display settings, Lễ Tết ---------- */
+.admin-panels {
+  --ink: #23345d;
+  --ink-soft: #5a6376;
+  --line: #d7dbe6;
+  --field-line: #c3cfe6;
+  --accent: #2f4678;
+  --gold: #b8892f;
+  --gold-soft: #fff8e6;
+  --danger: #8f1d1d;
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+.settings-panel,
+.events-panel {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.1rem 1.2rem;
+}
+
+.events-panel {
   grid-column: 1 / -1;
+}
+
+.editor-panel {
+  padding: 1.1rem 1.2rem;
+}
+
+/* editing someone: a gold edge so it's clear the form is not empty/new */
+.editor-panel--editing {
+  border-color: #e0c27a;
+  box-shadow: inset 4px 0 0 var(--gold);
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid #ece4d3;
+}
+
+.panel-head h2 {
   margin: 0;
-  padding: 0.6rem 0.8rem 0.7rem;
-  border: 1px solid #d7dbe6;
-  border-radius: 10px;
+  color: var(--ink);
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.panel-sub {
+  margin: 0.3rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.panel-sub code {
+  background: #f2efe8;
+  border-radius: 5px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.82rem;
+}
+
+.panel-head-btn {
+  flex: 0 0 auto;
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  background: var(--gold-soft);
+  color: #6b3d0c;
+  font-weight: 700;
+  padding: 0.35rem 0.85rem;
+  cursor: pointer;
+}
+
+.panel-head-btn:hover:not(:disabled) {
+  background: #fbe9bf;
+}
+
+.req {
+  color: #b42318;
+}
+
+.dirty-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #8a4b00;
+  background: #fff1d6;
+  border: 1px solid #f0c77a;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
+/* -- member form -- */
+.member-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.form-section {
+  margin: 0;
+  padding: 0.75rem 0.9rem 0.9rem;
+  border: 1px solid #e6e9f1;
+  border-radius: 12px;
+  background: #fbfcfe;
   min-width: 0;
 }
 
-.spouse-list legend {
-  padding: 0 0.3rem;
-  font-weight: 600;
+.form-section legend {
+  padding: 0 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a5a2b;
 }
 
-.spouse-list legend small {
-  font-weight: 400;
-  color: #6b5a44;
-}
-
-.spouse-list-row {
+.form-grid {
   display: grid;
-  grid-template-columns: 6rem minmax(0, 32rem) 2.2rem;
-  gap: 0.4rem;
-  align-items: center;
-  margin-bottom: 0.4rem;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 0.75rem 0.9rem;
 }
 
-.spouse-list-label {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #5f3a1a;
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
 }
 
-.spouse-list-remove {
-  height: 2.2rem;
-  border: 1px solid #e3b4b4;
-  border-radius: 6px;
-  background: #fff5f5;
-  color: #8f1d1d;
-  cursor: pointer;
+.field--wide {
+  grid-column: span 2;
 }
 
-.spouse-list-add {
-  border: 1px dashed #a77f48;
+.field--full {
+  grid-column: 1 / -1;
+}
+
+.field-label {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: #2c3e63;
+}
+
+.field-hint {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: #7a6a55;
+  line-height: 1.35;
+}
+
+.member-form input[type='text'],
+.member-form input[type='number'],
+.member-form select,
+.setting-select select,
+.events-table input[type='text'],
+.events-table input[type='number'] {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--field-line);
   border-radius: 8px;
-  background: #fffaf0;
-  color: #5c3818;
-  font-weight: 600;
-  padding: 0.3rem 0.7rem;
-  cursor: pointer;
+  background: #fff;
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+  color: #1b2a4a;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.member-form input:focus,
+.member-form select:focus,
+.setting-select select:focus,
+.events-table input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(47, 70, 120, 0.15);
 }
 
 .member-form input.is-locked {
@@ -2567,16 +2524,504 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
-.field-hint {
-  font-size: 0.78rem;
-  font-weight: 400;
-  color: #7a6a55;
+.member-form :deep(input) {
+  box-sizing: border-box;
 }
 
-.deceased-field span {
+/* Nam | Nữ | Khác — one click instead of a dropdown */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--field-line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  width: fit-content;
+}
+
+.segmented label {
+  position: relative;
+  padding: 0.5rem 0.95rem;
+  font-weight: 600;
+  color: #3b4a6e;
+  cursor: pointer;
+  user-select: none;
+}
+
+.segmented label + label {
+  border-left: 1px solid var(--field-line);
+}
+
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmented label.is-on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.segmented label:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.segmented--sm {
+  width: 100%;
+}
+
+.segmented--sm label {
+  flex: 1 1 0;
+  text-align: center;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  font-weight: 600;
+  color: #2c3e63;
+  cursor: pointer;
+}
+
+.check-row input {
+  width: 18px;
+  height: 18px;
+  margin: 0.1rem 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+.check-row span {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
+}
+
+.spouse-list {
+  gap: 0.45rem;
+}
+
+.spouse-list .field-label .field-hint {
+  font-weight: 400;
+  margin-left: 0.3rem;
+}
+
+.spouse-list-row {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 30rem) 2.3rem;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.spouse-list-label {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #5f3a1a;
+}
+
+.icon-btn,
+.dashed-btn,
+.btn,
+.panel-head-btn {
+  font-family: inherit;
+}
+
+.icon-btn {
+  width: 2.3rem;
+  height: 2.3rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.icon-btn--danger {
+  border-color: #e9c3c3;
+  background: #fff7f7;
+  color: var(--danger);
+}
+
+.icon-btn--danger:hover:not(:disabled) {
+  background: #fde8e8;
+}
+
+.dashed-btn {
+  width: fit-content;
+  border: 1px dashed #a77f48;
+  border-radius: 8px;
+  background: #fffaf0;
+  color: #5c3818;
+  font-weight: 700;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
+.dashed-btn:hover:not(:disabled) {
+  background: #fff1d6;
+}
+
+.dashed-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn {
+  border: 1px solid #a9bbe0;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--accent);
+  font-weight: 700;
+  padding: 0.55rem 1rem;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: #f1f5fd;
+}
+
+.btn--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: #23375f;
+}
+
+.btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: #5a6376;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: #f5f2ea;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* stays in view at the bottom of the screen while scrolling a long form */
+.form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 -1.2rem -1.1rem;
+  padding: 0.75rem 1.2rem;
+  border-top: 1px solid #ece4d3;
+  border-radius: 0 0 16px 16px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(4px);
+}
+
+.form-actions-note {
+  margin-left: auto;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.form-error {
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #f0c2c2;
+  border-radius: 8px;
+  background: #fff5f5;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* -- display settings: switches -- */
+.switch-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e6e9f1;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  font-weight: 600;
+  color: #2c3e63;
+  cursor: pointer;
+  background: #fff;
+}
+
+.switch-row + .switch-row {
+  border-top: 1px solid #eef0f5;
+}
+
+.switch-row:hover {
+  background: #fafbfe;
+}
+
+.switch {
+  appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.5rem;
+  height: 1.4rem;
+  margin: 0;
+  border-radius: 999px;
+  background: #cfd5e2;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s;
+}
+
+.switch:checked {
+  background: var(--accent);
+}
+
+.switch:checked::after {
+  transform: translateX(1.1rem);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.setting-select {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 1rem;
+}
+
+/* -- Lễ Tết table: one row per event -- */
+.events-table {
+  --event-cols: minmax(12rem, 1fr) 8.6rem 4.2rem 4.2rem 7.5rem 6.5rem 2.3rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.events-head,
+.event-row {
+  display: grid;
+  grid-template-columns: var(--event-cols);
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.events-head {
+  padding: 0 0.6rem 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a5a2b;
+  border-bottom: 1px solid #ece4d3;
+}
+
+.event-row {
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid #f1ece1;
+  border-left: 3px solid transparent;
+}
+
+.event-row:hover {
+  background: #fdfaf3;
+}
+
+/* âm lịch: gold edge · dương lịch: blue edge */
+.event-row.is-lunar {
+  border-left-color: #e0c27a;
+}
+
+.event-row.is-solar {
+  border-left-color: #9fb9e6;
+}
+
+.events-table input[type='number'] {
+  padding: 0.45rem 0.4rem;
+  text-align: center;
+}
+
+.events-table input:disabled {
+  background: #f2f2f2;
+  color: #999;
+}
+
+.event-last {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #5f3a1a;
+  cursor: pointer;
+}
+
+.event-last input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.event-last--none {
+  color: #b6b0a4;
+  cursor: default;
+  padding-left: 0.4rem;
+}
+
+.event-next {
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+
+.events-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.events-actions-spacer {
+  flex: 1 1 auto;
+}
+
+.lunar-events-message {
+  margin: 0.5rem 0 0;
+  color: #2f6b2f;
+  font-weight: 600;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 980px) {
+  .admin-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* narrow screens: each event becomes a small card (name on top, then lịch · ngày · tháng · cuối · xóa) */
+@media (max-width: 760px) {
+  .events-head {
+    display: none;
+  }
+
+  .event-row {
+    grid-template-columns: minmax(0, 1fr) 3.6rem 3.6rem 2.3rem;
+    grid-template-areas:
+      'name name name name'
+      'cal day month del'
+      'last next next next';
+    gap: 0.45rem;
+    padding: 0.6rem;
+  }
+
+  .event-row .event-name {
+    grid-area: name;
+  }
+
+  .event-row .segmented {
+    grid-area: cal;
+  }
+
+  .event-row .event-day {
+    grid-area: day;
+  }
+
+  .event-row .event-month {
+    grid-area: month;
+  }
+
+  .event-row .event-last {
+    grid-area: last;
+  }
+
+  .event-row .icon-btn {
+    grid-area: del;
+  }
+
+  .event-next {
+    grid-area: next;
+    justify-self: end;
+    font-size: 0.8rem;
+  }
+
+  .event-next::before {
+    content: 'Lần tới: ';
+  }
+}
+
+@media (max-width: 640px) {
+  .field--wide {
+    grid-column: 1 / -1;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .spouse-list-row {
+    grid-template-columns: minmax(0, 1fr) 2.3rem;
+  }
+
+  .spouse-list-label {
+    grid-column: 1 / -1;
+  }
+
+  .form-actions {
+    margin: 0 -0.85rem -0.85rem;
+    padding: 0.65rem 0.85rem;
+  }
+
+  .form-actions-note {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  /* 16px inputs stop iOS Safari from zooming in on focus */
+  .member-form input[type='text'],
+  .member-form input[type='number'],
+  .member-form select,
+  .setting-select select,
+  .events-table input[type='text'],
+  .events-table input[type='number'] {
+    font-size: 16px;
+  }
 }
 
 /* very narrow phones (iPhone SE, small Androids): keep the title on one line */

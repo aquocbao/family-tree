@@ -458,8 +458,13 @@ const toggleExpanded = async (): Promise<void> => {
 .multi-row {
   display: flex;
   align-items: center;
-  /* room under the cards for the lines to the outer spouses */
+  /* room under the cards for the children's lines */
   padding-bottom: 1.4rem;
+}
+
+/* top of the tree: nothing above, so make room for the lines to the outer spouses (drawn over the cards) */
+.node[data-depth='0'] > .unit-content .multi-row {
+  padding-top: 1.6rem;
 }
 
 .spouse-gap {
@@ -523,6 +528,16 @@ const toggleExpanded = async (): Promise<void> => {
   height: 1rem;
   border-left: 2px solid #9b3a24;
   transform: translateX(-50%);
+}
+
+/* Several spouses: FamilyTree sets --stem-shift so the line from the sibling bar lands on the person in the
+   middle. Reset on every node so nested nodes don't inherit it. An only child hangs straight from its parents. */
+.node {
+  --stem-shift: 0px;
+}
+
+.children > .node:not(:only-child)::before {
+  left: calc(50% + var(--stem-shift));
 }
 
 /* Row = this couple, plus (optionally) a child-in-law's parents on the right at the same level.

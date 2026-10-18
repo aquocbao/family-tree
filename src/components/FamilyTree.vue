@@ -70,6 +70,8 @@ const toggleDefaultMember = (memberId: string): void => {
 }
 // Admin pages have no door (no provider) → always open
 const gateOpen = inject<Ref<boolean>>('gateOpen', ref(true))
+// "✕" top right: back to the door (view page only; null on admin pages)
+const closeGate = inject<Ref<(() => void) | null>>('closeGate', ref(null))
 const treeWrapperRef = ref<HTMLElement | null>(null)
 
 const isFullView = ref(false)
@@ -403,6 +405,12 @@ const boxInCanvas = (element: HTMLElement, canvas: HTMLElement) => {
     if (parent && parent !== canvas && !canvas.contains(parent)) {
       return null
     }
+    // offsetTop/Left start inside the parent's border (e.g. the 2px sibling bar on each .children list):
+    // add it, or every generation drifts 2px further from the SVG lines
+    if (parent && parent !== canvas) {
+      left += parent.clientLeft
+      top += parent.clientTop
+    }
     current = parent
   }
   if (current !== canvas) {
@@ -574,6 +582,14 @@ const updateInLawLinks = (): void => {
       toggle.style.position = 'relative'
       if (toggle.style.left !== shift) toggle.style.left = shift
     }
+    // The line from the parents comes down to the person in the middle too, not to the row's centre
+    // (which falls between two cards). Only moves a pseudo-element, so the layout doesn't change.
+    const node = row.closest<HTMLElement>('li.node')
+    const nodeBox = node ? boxInCanvas(node, canvas) : null
+    if (node && nodeBox) {
+      const stemShift = `${Math.round(hostBox.left + hostBox.width / 2 - (nodeBox.left + nodeBox.width / 2))}px`
+      if (node.style.getPropertyValue('--stem-shift') !== stemShift) node.style.setProperty('--stem-shift', stemShift)
+    }
     for (const slot of row.querySelectorAll<HTMLElement>(':scope > .spouse-slot[data-spouse-id]')) {
       const spouseId = slot.dataset.spouseId ?? ''
       const card = slot.querySelector<HTMLElement>('.person-card')
@@ -590,17 +606,22 @@ const updateInLawLinks = (): void => {
         marriageMiddle.set(`${hostId}|${spouseId}`, { x: (x1 + x2) / 2, y, dx: (x1 + x2) / 2 - (hostBox.left + hostBox.width / 2) })
         if (text) labels.push({ key: `label-${hostId}-${spouseId}`, x: (x1 + x2) / 2, y: y - 6, text })
       } else {
-        const bottom = Math.max(hostBox.bottom, box.bottom)
-        const y = bottom + 7 * level
-        const xs = onRight ? hostBox.right - 12 * level : hostBox.left + 12 * level
+        // Over the top of the cards: the children's lines all leave from below, so this one never crosses them.
+        // The parent line comes down to the middle of the host, this one leaves near the host's edge.
+        const y = Math.min(hostBox.top, box.top) - 10 * level
+        const xs = onRight ? hostBox.right - 14 * level : hostBox.left + 14 * level
         const xe = box.left + box.width / 2
         links.push({
           key: `marry-${hostId}-${spouseId}`,
-          d: `M ${xs} ${hostBox.bottom} L ${xs} ${y} L ${xe} ${y} L ${xe} ${box.bottom}`,
+          d: `M ${xs} ${hostBox.top} L ${xs} ${y} L ${xe} ${y} L ${xe} ${box.top}`,
         })
-        marriageMiddle.set(`${hostId}|${spouseId}`, { x: (xs + xe) / 2, y, dx: (xs + xe) / 2 - (hostBox.left + hostBox.width / 2) })
-        // on the line, just past the inner spouse's card
-        if (text) labels.push({ key: `label-${hostId}-${spouseId}`, x: xe + (onRight ? -1 : 1) * (box.width / 2 + 20), y: y - 3, text })
+        // this marriage's children hang from the bottom of the outer spouse's card
+        marriageMiddle.set(`${hostId}|${spouseId}`, { x: xe, y: box.bottom, dx: xe - (hostBox.left + hostBox.width / 2) })
+        // above the line, over the gap just before the outer spouse's card
+        const gap = slot.previousElementSibling as HTMLElement | null
+        const gapBox = gap ? boxInCanvas(gap, canvas) : null
+        const labelX = gapBox ? gapBox.left + gapBox.width / 2 : onRight ? box.left - 22 : box.right + 22
+        if (text) labels.push({ key: `label-${hostId}-${spouseId}`, x: labelX, y: y - 4, text })
       }
     }
   }
@@ -1710,6 +1731,19 @@ onBeforeUnmount(() => {
     :class="{ 'full-view-active': isFullView, 'pseudo-full-view': isPseudoFullView }"
     aria-labelledby="tree-block-title"
   >
+    <!-- zero-height bar that stays in view while the tree scrolls sideways; holds the ✕ in the top right corner -->
+    <div v-if="closeGate && !isFullView && !isPseudoFullView" class="tree-close-bar">
+      <button
+        type="button"
+        class="tree-close"
+        aria-label="Đóng gia phả"
+        title="Đóng gia phả"
+        @click="closeGate()"
+      >
+        ✕
+      </button>
+    </div>
+
     <h2 id="tree-block-title" class="tree-block-title">Gia Phả</h2>
 
     <dl v-if="members.length" class="tree-stats" aria-label="Thống kê gia phả">
@@ -1938,17 +1972,20 @@ onBeforeUnmount(() => {
     url('/gia-pha-cloud-corner-tr.svg'),
     url('/gia-pha-cloud-corner-bl.svg'),
     url('/gia-pha-cloud-corner-br.svg'),
+    /* faint bamboo groves and coconut palms over the whole page, behind the tree */
+    url('/gia-pha-scenery.svg'),
     var(--book-spine),
     var(--book-page-curve),
     var(--book-page-stack),
     var(--book-page-stack),
     url('/gia-pha-bg.svg');
-  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat;
   background-position:
     left 20px top 8px,
     right 20px top 8px,
     left 20px bottom 8px,
     right 20px bottom 8px,
+    center top 120px,
     center,
     center,
     left top,
@@ -1959,6 +1996,7 @@ onBeforeUnmount(() => {
     140px 140px,
     140px 140px,
     140px 140px,
+    456px 864px,
     100% 100%,
     100% 100%,
     12px 100%,
@@ -2436,6 +2474,57 @@ onBeforeUnmount(() => {
 }
 
 /* Name of block 2, centred in the frame (stays put while the tree scrolls sideways) */
+.tree-close-bar {
+  position: sticky;
+  left: 0;
+  z-index: 11;
+  height: 0;
+}
+
+/* in the top right corner of the page, inside the cloud ornament */
+.tree-close {
+  position: absolute;
+  top: -0.6rem;
+  right: -1.2rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid #b8892f;
+  border-radius: 50%;
+  background: #fff8e6;
+  color: #7a1d16;
+  font-family: inherit;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(60, 25, 8, 0.25);
+  transition: background 0.15s, transform 0.15s;
+}
+
+.tree-close:hover {
+  background: #9b3a24;
+  border-color: #7a1d16;
+  color: #fff8e6;
+  transform: rotate(90deg);
+}
+
+.tree-close:focus-visible {
+  outline: 2px solid #7a1d16;
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .tree-close {
+    top: -0.2rem;
+    right: 0;
+    width: 2.1rem;
+    height: 2.1rem;
+    font-size: 1rem;
+  }
+}
+
 .tree-block-title {
   position: sticky;
   left: 0;
@@ -2520,6 +2609,7 @@ onBeforeUnmount(() => {
       right 12px top 6px,
       left 12px bottom 6px,
       right 12px bottom 6px,
+      center top 110px,
       center,
       center,
       left top,
@@ -2531,6 +2621,7 @@ onBeforeUnmount(() => {
       0 0,
       0 0,
       0 0,
+      304px 576px,
       100% 100%,
       100% 100%,
       4px 100%,

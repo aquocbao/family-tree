@@ -46,6 +46,62 @@ body {
   }
 }
 
+/* Bamboo (bottom-left) and coconut palms (bottom-right): faint ink-wash scenery fixed behind everything.
+   isolation makes body a stacking context, so the z-index -1 layers sit above the paper, below the content. */
+body {
+  isolation: isolate;
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  bottom: 0;
+  z-index: -1;
+  height: min(78vh, 720px);
+  pointer-events: none;
+  opacity: 0.42;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+body::before {
+  left: 0;
+  width: min(30vw, 340px);
+  background-image: url('/gia-pha-bamboo.svg');
+  background-position: left bottom;
+}
+
+body::after {
+  right: 0;
+  width: min(34vw, 380px);
+  background-image: url('/gia-pha-coconut.svg');
+  background-position: right bottom;
+}
+
+@media (max-width: 640px) {
+  body::before,
+  body::after {
+    height: min(55vh, 420px);
+    opacity: 0.3;
+  }
+
+  body::before {
+    width: 42vw;
+  }
+
+  body::after {
+    width: 46vw;
+  }
+}
+
+@media print {
+  body::before,
+  body::after {
+    display: none;
+  }
+}
+
 #app {
   min-height: 100vh;
   padding: 40px 0;

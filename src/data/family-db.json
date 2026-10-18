@@ -26,15 +26,26 @@
       "position": 2,
       "gender": "female",
       "fatherId": "PVL1",
-      "motherId": "NTB2"
+      "motherId": "NTB2",
+      "spouseIds": [
+        "PVMU",
+        "NTĐ",
+        "NVNA"
+      ],
+      "spouseId": "PVMU"
     },
     {
       "id": "PTT",
       "name": "PHẠM THỊ THƠ",
       "position": 4,
+      "deathDateLunar": "16-02",
       "gender": "female",
       "fatherId": "PVL1",
       "motherId": "NTB2",
+      "spouseIds": [
+        "LVH"
+      ],
+      "spouseId": "LVH",
       "deceased": true
     },
     {
@@ -64,7 +75,11 @@
       "position": 8,
       "gender": "male",
       "fatherId": "PVL1",
-      "motherId": "NTB2"
+      "motherId": "NTB2",
+      "spouseIds": [
+        "CTTTNTTC"
+      ],
+      "spouseId": "CTTTNTTC"
     },
     {
       "id": "PVT",
@@ -1127,6 +1142,157 @@
         "VTT"
       ],
       "spouseId": "VTT"
+    },
+    {
+      "id": "PVMU",
+      "name": "PHẠM VĂN MƯA",
+      "gender": "male",
+      "spouseIds": [
+        "PTN"
+      ],
+      "spouseId": "PTN",
+      "deceased": true
+    },
+    {
+      "id": "NTĐ",
+      "name": "NGUYỄN THÀNH ĐƯỢC",
+      "gender": "male",
+      "spouseIds": [
+        "PTN"
+      ],
+      "spouseId": "PTN",
+      "deceased": true
+    },
+    {
+      "id": "NVNA",
+      "name": "NGUYỄN VĂN NA",
+      "gender": "male",
+      "spouseIds": [
+        "PTN"
+      ],
+      "spouseId": "PTN",
+      "deceased": true
+    },
+    {
+      "id": "PTTA",
+      "name": "PHẠM TẤN TÀI",
+      "position": 1,
+      "gender": "male",
+      "fatherId": "PVMU",
+      "motherId": "PTN",
+      "deceased": true
+    },
+    {
+      "id": "PTGA",
+      "name": "PHẠM THỊ GẤM CHỊ",
+      "position": 2,
+      "gender": "female",
+      "fatherId": "PVMU",
+      "motherId": "PTN"
+    },
+    {
+      "id": "PTNGOC",
+      "name": "PHẠM TẤN NGỌC",
+      "position": 3,
+      "gender": "male",
+      "fatherId": "PVMU",
+      "motherId": "PTN"
+    },
+    {
+      "id": "PTGE",
+      "name": "PHẠM THỊ GẤM EM",
+      "position": 4,
+      "gender": "female",
+      "fatherId": "PVMU"
+    },
+    {
+      "id": "PTAN",
+      "name": "PHẠM THÀNH ÂN",
+      "gender": "male",
+      "fatherId": "NTĐ",
+      "motherId": "PTN"
+    },
+    {
+      "id": "PTNT",
+      "name": "PHẠM THỊ NGỌC TRANG",
+      "gender": "female",
+      "fatherId": "NTĐ",
+      "motherId": "PTN"
+    },
+    {
+      "id": "PTQ",
+      "name": "PHẠM THỊ QUYẾN",
+      "position": 1,
+      "gender": "female",
+      "fatherId": "NVNA",
+      "motherId": "PTN"
+    },
+    {
+      "id": "NTV",
+      "name": "PHẠM THÀNH VŨ",
+      "position": 2,
+      "gender": "male",
+      "fatherId": "NVNA",
+      "motherId": "PTN"
+    },
+    {
+      "id": "LVH",
+      "name": "LÊ VĂN HÒA",
+      "gender": "male",
+      "spouseIds": [
+        "PTT"
+      ],
+      "spouseId": "PTT"
+    },
+    {
+      "id": "LVB",
+      "name": "LÊ VĂN BÌNH",
+      "position": 1,
+      "gender": "male",
+      "fatherId": "LVH",
+      "motherId": "PTT",
+      "deceased": true
+    },
+    {
+      "id": "LTG",
+      "name": "LÊ THỊ GÁI",
+      "position": 2,
+      "gender": "female",
+      "fatherId": "LVH",
+      "motherId": "PTT"
+    },
+    {
+      "id": "LVQ",
+      "name": "LÊ VĂN QUẸO",
+      "position": 3,
+      "gender": "male",
+      "fatherId": "LVH",
+      "motherId": "PTT"
+    },
+    {
+      "id": "LTT",
+      "name": "LÊ THỊ THƯƠNG",
+      "position": 5,
+      "gender": "female",
+      "fatherId": "LVH",
+      "motherId": "PTT"
+    },
+    {
+      "id": "LVC",
+      "name": "LÊ VĂN CƯỜNG",
+      "position": 4,
+      "gender": "male",
+      "fatherId": "LVH",
+      "motherId": "PTT"
+    },
+    {
+      "id": "CTTTNTTC",
+      "name": "CÔNG TÂN TÔN NỮ THỊ THU CÚC",
+      "gender": "female",
+      "spouseIds": [
+        "PCH"
+      ],
+      "spouseId": "PCH"
     }
   ],
   "settings": {

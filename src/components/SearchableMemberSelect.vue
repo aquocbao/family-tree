@@ -177,11 +177,21 @@ watch(
 }
 
 .searchable-input {
-  border: 1px solid #becce8;
+  box-sizing: border-box;
+  border: 1px solid #c3cfe6;
   border-radius: 8px;
-  padding: 0.45rem 0.6rem;
+  background: #fff;
+  padding: 0.5rem 0.65rem;
   font: inherit;
+  color: #1b2a4a;
   width: 100%;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.searchable-input:focus {
+  outline: none;
+  border-color: #2f4678;
+  box-shadow: 0 0 0 3px rgba(47, 70, 120, 0.15);
 }
 
 .dropdown {
