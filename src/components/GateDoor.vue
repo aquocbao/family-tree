@@ -91,12 +91,12 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
     <div v-if="shown !== 'open' && shown !== 'welcome'" class="gate-doors">
       <div class="gate-beam" aria-hidden="true"></div>
       <div class="door door--left" aria-hidden="true">
-        <div class="door-panel door-panel--top"><span class="door-glyph">家 (Gia)</span></div>
+        <div class="door-panel door-panel--top"><span class="door-glyph"><span class="glyph-han">家</span><span class="glyph-reading">Gia</span></span></div>
         <div class="door-panel door-panel--bottom"></div>
         <span class="door-ring door-ring--left"></span>
       </div>
       <div class="door door--right" aria-hidden="true">
-        <div class="door-panel door-panel--top"><span class="door-glyph">譜 (Phả)</span></div>
+        <div class="door-panel door-panel--top"><span class="door-glyph"><span class="glyph-han">譜</span><span class="glyph-reading">Phả</span></span></div>
         <div class="door-panel door-panel--bottom"></div>
         <span class="door-ring door-ring--right"></span>
       </div>
@@ -368,14 +368,31 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
   flex: 1.4 1 0;
 }
 
+/* the character, with its Vietnamese reading underneath (stays inside the panel at any width) */
 .door-glyph {
-  font-family: 'Ma Shan Zheng', 'LXGW WenKai TC', serif;
-  font-size: clamp(3rem, 9vw, 7rem);
-  line-height: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15em;
+  max-width: 100%;
   color: #f3cf6e;
   text-shadow:
     0 2px 0 #6a3f0c,
     0 0 18px rgba(243, 207, 110, 0.35);
+}
+
+.glyph-han {
+  font-family: 'Ma Shan Zheng', 'LXGW WenKai TC', serif;
+  font-size: clamp(3rem, 10vw, 7rem);
+  line-height: 1;
+}
+
+.glyph-reading {
+  font-family: 'Noto Serif', Georgia, serif;
+  font-size: clamp(0.85rem, 2.2vw, 1.5rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
 }
 
 /* door knockers */
@@ -505,27 +522,50 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
     background-size: 30px 30px, auto, auto;
   }
 
+  /* narrow doors: the knockers would sit under the lock and its label */
   .door-ring {
-    width: 32px;
-    height: 32px;
-    border-width: 4px;
+    display: none;
   }
 
-  .door-ring--left {
-    right: 18px;
+  .door {
+    padding: 7% 7% 8%;
+    gap: 5%;
   }
 
-  .door-ring--right {
-    left: 18px;
+  .door-panel {
+    box-shadow:
+      inset 0 0 0 3px #6a130d,
+      inset 0 0 0 4px rgba(217, 180, 92, 0.75),
+      0 2px 5px rgba(0, 0, 0, 0.35);
+  }
+
+  /* character in the upper part of the panel, clear of the lock in the middle */
+  .door-panel--top {
+    place-items: start center;
+    padding-top: 14%;
+  }
+
+  .glyph-han {
+    font-size: clamp(2.6rem, 14vw, 3.6rem);
+  }
+
+  .glyph-reading {
+    font-size: 0.85rem;
+  }
+
+  .gate-lock {
+    transform: translate(-50%, -30%);
+    gap: 0.45rem;
   }
 
   .lock-icon {
-    width: 54px;
-    height: 68px;
+    width: 50px;
+    height: 62px;
   }
 
   .lock-text {
-    font-size: 0.8rem;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.78rem;
   }
 
   .welcome-text {
