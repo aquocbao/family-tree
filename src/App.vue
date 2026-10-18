@@ -232,9 +232,10 @@ const updateTitleLayout = (): void => {
   let coupletShift = 0 // vertical translate; offsetTop ignores it, so measurements use the natural position
 
   const app = spacer.parentElement
-  if (getComputedStyle(couplet).position !== 'absolute') {
+  const coupletStyle = getComputedStyle(couplet)
+  if (coupletStyle.display === 'none' || coupletStyle.position !== 'absolute') {
     couplets.forEach((el) => (el.style.transform = ''))
-    spacer.style.height = '0px' // wide screens: scrolls are fixed at the sides
+    spacer.style.height = '0px' // wide screens: scrolls are fixed at the sides; phones: no scrolls
     app?.style.setProperty('--couplet-lift', '0px')
     return
   }
@@ -2397,46 +2398,13 @@ onMounted(async () => {
     letter-spacing: 0.12em;
   }
 
+  /* no scrolls on phones, the page gets the full width */
   .couplet {
-    --char-size: 1.45rem;
-    --reading-min: 0.64rem;
-    width: 2.95rem;
-    top: 0.8rem;
-  }
-
-  .couplet::before,
-  .couplet::after {
-    left: -0.3rem;
-    right: -0.3rem;
-    height: 0.4rem;
-  }
-
-  .couplet::before {
-    top: -0.32rem;
-  }
-
-  .couplet::after {
-    bottom: -0.32rem;
-  }
-
-  .couplet--left {
-    left: 0.4rem;
-  }
-
-  .couplet--right {
-    right: 0.4rem;
-  }
-
-  /* Lời ngỏ page: no scrolls on phones, the page gets the full width */
-  .app--welcome .couplet {
     display: none;
   }
 
   .app-header {
-    width: calc(100% - 7.3rem);
-  }
-
-  .app-header {
+    width: 100%;
     margin: 0.25rem auto 1rem;
     padding: 0.8rem 1.25rem 0.9rem;
   }
