@@ -1278,6 +1278,27 @@ type PrintScope = {
   children?: (unitKey: string) => FamilyUnit[]
 }
 
+/**
+ * A person with several spouses: children of Vợ/Chồng 1 first, then of Vợ/Chồng 2, 3, …; children whose other
+ * parent isn't one of the spouses come last. The sort is stable, so siblings keep their usual order in each group.
+ */
+const childrenBySpouseOrder = (unit: FamilyUnit, children: FamilyUnit[]): FamilyUnit[] => {
+  const spouses = unit.spouses ?? []
+  if (!unit.host || spouses.length < 2) return children
+  const spouseRank = (child: FamilyUnit): number => {
+    let best = spouses.length
+    for (const member of child.members) {
+      const index = spouses.findIndex((spouse) => spouse.id === member.fatherId || spouse.id === member.motherId)
+      if (index !== -1) best = Math.min(best, index)
+    }
+    return best
+  }
+  return children
+    .map((child, index) => ({ child, index, rank: spouseRank(child) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((item) => item.child)
+}
+
 const buildPrintHtml = (scope: PrintScope): string => {
   const lines: string[] = []
   const seen = new Set<string>()
@@ -1323,7 +1344,7 @@ const buildPrintHtml = (scope: PrintScope): string => {
     const indent = generation - scope.startGeneration(scope.roots[0] ?? unit)
     lines.push(`<section class="unit" style="margin-left:${Math.max(0, indent) * 2.2}em">${rows.join('')}</section>`)
 
-    for (const child of (scope.children ?? getChildUnits)(unit.key)) {
+    for (const child of childrenBySpouseOrder(unit, (scope.children ?? getChildUnits)(unit.key))) {
       walk(child, generation + 1, unit)
     }
   }
