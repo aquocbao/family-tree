@@ -28,9 +28,8 @@ const shown = computed<GateState>(() => (props.enabled ? state.value : 'open'))
 type GatePhase = 'door' | 'welcome' | 'open'
 const emit = defineEmits<{ phase: [phase: GatePhase] }>()
 watch(
-  // the Lời ngỏ page counts from the moment the doors start swinging open (it is already behind them)
-  (): GatePhase =>
-    shown.value === 'open' ? 'open' : shown.value === 'opening' || shown.value === 'welcome' ? 'welcome' : 'door',
+  // the layout stays the door's while the doors swing (nothing jumps behind them); the Lời ngỏ page comes once they are open
+  (): GatePhase => (shown.value === 'open' ? 'open' : shown.value === 'welcome' ? 'welcome' : 'door'),
   (phase) => emit('phase', phase),
   { immediate: true },
 )
@@ -70,7 +69,7 @@ const openGate = (): void => {
   }
   state.value = 'unlocking'
   timers.push(window.setTimeout(() => (state.value = 'opening'), 550))
-  timers.push(window.setTimeout(() => void showWelcome(), 550 + 1700))
+  timers.push(window.setTimeout(() => void showWelcome(), 550 + 1500))
 }
 
 // "✕" on the gia phả: close the doors again and go back to the first page (the lock)
@@ -109,7 +108,7 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
     </div>
 
     <section
-      v-if="shown === 'opening' || shown === 'welcome'"
+      v-if="shown === 'welcome'"
       ref="welcomeRef"
       class="gate-welcome"
       tabindex="-1"
@@ -127,6 +126,7 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
       <div class="scroll-rod" aria-hidden="true"></div>
     </section>
 
+    <Transition name="doors-fade">
     <div v-if="shown !== 'open' && shown !== 'welcome'" class="gate-doors">
       <div class="gate-beam" aria-hidden="true"></div>
       <div class="door door--left" aria-hidden="true">
@@ -141,6 +141,7 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
       </div>
 
       <button type="button" class="gate-lock" aria-label="Mở khóa để xem gia phả" @click="openGate">
+        <span class="lock-glow" aria-hidden="true"></span>
         <svg class="lock-icon" viewBox="0 0 64 80" aria-hidden="true">
           <defs>
             <linearGradient id="gate-gold" x1="0" y1="0" x2="0" y2="1">
@@ -157,6 +158,7 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
         <span class="lock-text">Nhấn vào khóa để mở gia phả</span>
       </button>
     </div>
+    </Transition>
   </div>
 </template>
 
@@ -175,6 +177,17 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
 
 .gate-content {
   transition: opacity 1.2s ease 0.3s;
+}
+
+/* "Vào xem gia phả": the tree fades in instead of popping up (opacity only, so sticky bars keep working) */
+.gate--open .gate-content {
+  animation: content-in 0.6s ease both;
+}
+
+@keyframes content-in {
+  from {
+    opacity: 0;
+  }
 }
 
 /* Lời ngỏ page: the tree stays laid out but out of sight until the reader goes in */
@@ -218,7 +231,7 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
   color: #3d2a17;
   font-family: 'Noto Serif', Georgia, serif;
   transform-origin: top center;
-  animation: scroll-unroll 1s cubic-bezier(0.3, 0.6, 0.25, 1) 0.15s both;
+  animation: scroll-unroll 1.1s cubic-bezier(0.22, 0.8, 0.3, 1) 0.15s both;
 }
 
 .welcome-kicker {
@@ -326,6 +339,48 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
   padding-top: 26px; /* under the beam */
 }
 
+/* warm light shining through as the doors part */
+.gate-doors::before {
+  content: '';
+  position: absolute;
+  inset: 26px 0 0;
+  background:
+    radial-gradient(ellipse at 50% 45%, #fffaf0 0%, #fbf0d2 35%, #f1dfb0 70%, #e6cd92 100%);
+  opacity: 0;
+  transition: opacity 0.9s ease 0.2s;
+}
+
+.gate--opening .gate-doors::before {
+  opacity: 1;
+}
+
+/* doors are open: the frame fades away while the Lời ngỏ scroll unrolls */
+.doors-fade-leave-active {
+  transition: opacity 0.45s ease;
+}
+
+/* the gate is already in "welcome" while the frame fades: keep it as it was at the end of the swing */
+.doors-fade-leave-active::before {
+  opacity: 1;
+}
+
+.doors-fade-leave-active .gate-beam,
+.doors-fade-leave-active .gate-lock {
+  opacity: 0;
+}
+
+.doors-fade-leave-active .door--left {
+  transform: rotateY(-104deg);
+}
+
+.doors-fade-leave-active .door--right {
+  transform: rotateY(104deg);
+}
+
+.doors-fade-leave-to {
+  opacity: 0;
+}
+
 /* carved lintel across the top, with gold hồi văn */
 .gate-beam {
   position: absolute;
@@ -363,8 +418,26 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
     inset 0 0 0 6px #5a120c,
     inset 0 0 0 8px #c9a24a,
     inset 0 0 40px rgba(0, 0, 0, 0.35);
-  transition: transform 1.6s cubic-bezier(0.55, 0.05, 0.25, 1);
+  transition: transform 1.6s cubic-bezier(0.45, 0.05, 0.25, 1);
   backface-visibility: hidden;
+  /* own GPU layer: the lacquer, studs and shadows are painted once, then only rotated */
+  will-change: transform;
+  z-index: 1;
+}
+
+/* the door darkens as it turns away from the light (opacity only, cheap to animate) */
+.door::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 4, 2, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.4s ease-in;
+}
+
+.gate--opening .door::after {
+  opacity: 1;
 }
 
 .door--left {
@@ -487,19 +560,36 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
 }
 
 .lock-icon {
+  position: relative;
   width: 72px;
   height: 90px;
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+  /* `scale` (not `transform`) so the hover zoom and the unlock shake don't override each other */
+  transition: scale 0.25s ease;
+}
+
+/* pulsing halo behind the lock: an opacity/scale animation instead of an animated filter (no repaint each frame) */
+.lock-glow {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  width: 116px;
+  height: 116px;
+  margin-left: -58px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(246, 215, 124, 0.7) 0%, rgba(246, 215, 124, 0.25) 40%, transparent 68%);
+  pointer-events: none;
+  will-change: opacity, transform;
   animation: lock-glow 2.4s ease-in-out infinite;
 }
 
 .lock-shackle {
-  transition: transform 0.45s ease;
+  transition: transform 0.45s cubic-bezier(0.3, 1.4, 0.5, 1);
 }
 
 .gate-lock:hover .lock-icon,
 .gate-lock:focus-visible .lock-icon {
-  transform: scale(1.06);
+  scale: 1.06;
 }
 
 .gate-lock:focus-visible {
@@ -533,8 +623,14 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
 }
 
 @keyframes lock-glow {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(0.85);
+  }
   50% {
-    filter: drop-shadow(0 0 12px rgba(246, 215, 124, 0.85));
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -630,6 +726,13 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
     height: 62px;
   }
 
+  .lock-glow {
+    top: -9px;
+    width: 80px;
+    height: 80px;
+    margin-left: -40px;
+  }
+
   .lock-text {
     padding: 0.3rem 0.75rem;
     font-size: 0.78rem;
@@ -649,7 +752,9 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
 
 @media (prefers-reduced-motion: reduce) {
   .door,
+  .door::after,
   .lock-icon,
+  .lock-glow,
   .lock-shackle,
   .gate-content,
   .gate-welcome,
