@@ -91,6 +91,11 @@ const toggleDefaultMember = inject<((id: string) => void) | undefined>('toggleDe
 const defaultMemberId = inject<Ref<string | null> | undefined>('defaultMemberId', undefined)
 const isDefault = computed(() => defaultMemberId?.value === props.member.id)
 const memberById = inject<(id?: string) => FamilyMember | undefined>('familyMemberById', () => undefined)
+const generationOfMember = inject<((id: string) => number | undefined) | undefined>('generationOfMember', undefined)
+const generation = computed(() => {
+  const value = generationOfMember?.(props.member.id)
+  return value && value > 0 ? value : undefined
+})
 const showMemorialPlaceSetting = inject<Ref<boolean> | undefined>('showMemorialPlace', undefined)
 const memorialPlace = computed(() =>
   showMemorialPlaceSetting?.value === false ? '' : memorialPlaceLabel(props.member, memberById),
@@ -130,6 +135,7 @@ const formatDate = (value?: string): string => {
       <h3>Đã ẩn thông tin</h3>
     </template>
     <template v-else>
+      <span v-if="generation" class="generation-tag" :title="`Đời thứ ${generation}`">Đ{{ generation }}</span>
       <div class="avatar" :class="`avatar--${genderClass}`" role="img" :aria-label="genderLabel" :title="genderLabel">
         <img
           v-if="member.gender === 'male' || member.gender === 'female'"
@@ -272,6 +278,22 @@ const formatDate = (value?: string): string => {
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.03em;
+}
+
+/* số đời, small text in the top-left corner */
+.generation-tag {
+  position: absolute;
+  top: 0.45rem;
+  left: 0.6rem;
+  color: #7a6a52;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* below the "Mới" badge when both are shown */
+.new-badge ~ .generation-tag {
+  top: 0.85rem;
 }
 
 .person-card--female {

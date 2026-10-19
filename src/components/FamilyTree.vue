@@ -415,6 +415,42 @@ const treeStats = computed(() => {
 
 const getInLawParents = (memberId: string): FamilyUnit | undefined => unitParentLinks.value.inLawByMemberId.get(memberId)
 
+// Số đời of every unit (1 = top of the tree). Parents of a married-in spouse sit one đời above that spouse.
+const generationByUnitKey = computed(() => {
+  const inLawChildUnitKey = new Map<string, string>()
+  for (const [memberId, parentUnit] of unitParentLinks.value.inLawByMemberId) {
+    const childKey = units.value.memberToUnitKey.get(memberId)
+    if (childKey && !inLawChildUnitKey.has(parentUnit.key)) inLawChildUnitKey.set(parentUnit.key, childKey)
+  }
+
+  const result = new Map<string, number>()
+  const visiting = new Set<string>()
+  const generationOf = (key: string): number => {
+    const known = result.get(key)
+    if (known !== undefined) return known
+    if (visiting.has(key)) return 1
+    visiting.add(key)
+    const parentKey = unitParentLinks.value.primary.get(key)?.parentKey
+    const inLawChildKey = inLawChildUnitKey.get(key)
+    const generation = parentKey
+      ? generationOf(parentKey) + 1
+      : inLawChildKey
+        ? generationOf(inLawChildKey) - 1
+        : 1
+    visiting.delete(key)
+    result.set(key, generation)
+    return generation
+  }
+
+  for (const key of units.value.unitMap.keys()) generationOf(key)
+  return result
+})
+
+const generationOfMember = (memberId: string): number | undefined => {
+  const key = units.value.memberToUnitKey.get(memberId)
+  return key ? generationByUnitKey.value.get(key) : undefined
+}
+
 // ---- Connector lines for in-law parents (computed from the rendered layout) ----
 const canvasRef = ref<HTMLElement | null>(null)
 const inLawLinks = ref<{ key: string; d: string; dashed?: boolean }[]>([])
@@ -836,6 +872,8 @@ const getMemberById = (id?: string): FamilyMember | undefined => {
 
 // Cards look up other members (e.g. who hosts the đám giỗ)
 provide('familyMemberById', getMemberById)
+// "Đ9" tag on every card: the member's số đời
+provide('generationOfMember', generationOfMember)
 // "In" button on every card: open the print chooser for that person
 provide('selectLineage', (memberId: string) => selectLineage(memberId))
 provide('lineageMemberId', lineageMemberId)
