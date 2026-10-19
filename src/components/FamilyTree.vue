@@ -1029,13 +1029,26 @@ const goToMember = async (memberId: string): Promise<void> => {
     return
   }
 
+  // Parents of a married-in spouse (e.g. the bride's parents) have no place of their own: they are drawn
+  // beside the row of their child's parents-in-law, so open the way to that child instead.
+  let anchorKey = unitKey
+  if (!rootUnits.value.some((unit) => unit.key === unitKey) && !unitParentLinks.value.primary.has(unitKey)) {
+    for (const [childId, parentUnit] of unitParentLinks.value.inLawByMemberId) {
+      const childKey = parentUnit.key === unitKey ? units.value.memberToUnitKey.get(childId) : undefined
+      if (childKey) {
+        anchorKey = childKey
+        break
+      }
+    }
+  }
+
   // Show the whole tree and open every ancestor of the target node.
   selectedUnitKey.value = null
   lineageKey.value = null
   lineageMemberId.value = null
   const keys = new Set<string>()
   const visited = new Set<string>()
-  let currentKey: string | undefined = parentUnitKeyByUnitKey.value.get(unitKey)
+  let currentKey: string | undefined = parentUnitKeyByUnitKey.value.get(anchorKey)
   while (currentKey && !visited.has(currentKey)) {
     visited.add(currentKey)
     keys.add(currentKey)
