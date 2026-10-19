@@ -136,7 +136,10 @@ const whenLabel = (daysLeft: number): string => {
 .anniversary-list {
   margin: 0;
   padding: 0.4rem 0.55rem 0.5rem;
-  background: linear-gradient(180deg, #fbf3dc 0%, #f4e6c1 100%);
+  /* faint hoa văn, as on the gia phả page */
+  background:
+    url('/gia-pha-hoa-van.svg') repeat center top / 240px 240px,
+    linear-gradient(180deg, #fbf3dc 0%, #f4e6c1 100%);
   border: 1px solid #c9a24a;
   border-radius: 8px;
   box-shadow: 0 3px 8px rgba(60, 20, 8, 0.12);
@@ -277,6 +280,10 @@ const whenLabel = (daysLeft: number): string => {
   .anniversary-blocks:has(> .anniversary-list:nth-child(2)) {
     grid-template-columns: 1fr;
     gap: 0.4rem;
+  }
+
+  .anniversary-list {
+    background-size: 170px 170px, auto;
   }
 
   .anniversary-list {

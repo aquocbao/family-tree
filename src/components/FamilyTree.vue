@@ -68,6 +68,38 @@ const toggleDefaultMember = (memberId: string): void => {
     // private mode / storage blocked: works until the page is reloaded
   }
 }
+
+/* "Đã lưu": dòng trực hệ saved under a name of the reader's choice, one click to open again. Kept in localStorage. */
+interface SavedLineage {
+  id: string
+  name: string
+  memberId: string
+}
+const SAVED_LINEAGES_KEY = 'gia-pha-saved-lineages'
+const readSavedLineages = (): SavedLineage[] => {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(SAVED_LINEAGES_KEY) ?? '[]')
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (item): item is SavedLineage =>
+            typeof item?.id === 'string' && typeof item?.name === 'string' && typeof item?.memberId === 'string',
+        )
+      : []
+  } catch {
+    return []
+  }
+}
+const savedLineages = ref<SavedLineage[]>(readSavedLineages())
+const writeSavedLineages = (): void => {
+  try {
+    localStorage.setItem(SAVED_LINEAGES_KEY, JSON.stringify(savedLineages.value))
+  } catch {
+    // private mode / storage blocked: works until the page is reloaded
+  }
+}
+const isSavingLineage = ref(false)
+const savedLineageName = ref('')
+const savedLineageInputRef = ref<HTMLInputElement | null>(null)
 // Admin pages have no door (no provider) → always open
 const gateOpen = inject<Ref<boolean>>('gateOpen', ref(true))
 // "✕" top right: back to the door (view page only; null on admin pages)
@@ -905,6 +937,7 @@ const selectLineage = (memberId: string): void => {
   const unitKey = units.value.memberToUnitKey.get(memberId)
   if (!unitKey) return
   lineageMemberId.value = memberId
+  isSavingLineage.value = false
   resetExpandState()
   selectedUnitKey.value = null
   lineageKey.value = unitKey
@@ -1092,6 +1125,58 @@ const clearFocusedTree = (): void => {
   selectedUnitKey.value = null
   lineageKey.value = null
   lineageMemberId.value = null
+  isSavingLineage.value = false
+}
+
+// ---- "Đã lưu" list ----
+// Entries whose person is no longer in the tree (deleted / hidden) are left out, not erased.
+const visibleSavedLineages = computed(() =>
+  savedLineages.value.filter((item) => units.value.memberToUnitKey.has(item.memberId)),
+)
+const isCurrentLineageSaved = computed(() =>
+  savedLineages.value.some((item) => item.memberId === lineageMemberId.value),
+)
+
+const startSavingLineage = async (): Promise<void> => {
+  // suggest the saved name if there is one, otherwise the chosen person's name
+  const saved = savedLineages.value.find((item) => item.memberId === lineageMemberId.value)
+  savedLineageName.value =
+    saved?.name ?? props.members.find((member) => member.id === lineageMemberId.value)?.name ?? lineageLabel.value
+  isSavingLineage.value = true
+  await nextTick()
+  savedLineageInputRef.value?.select()
+}
+
+const saveCurrentLineage = (): void => {
+  const memberId = lineageMemberId.value
+  const name = savedLineageName.value.trim()
+  if (!memberId || !name) return
+  savedLineages.value = [
+    ...savedLineages.value.filter((item) => item.memberId !== memberId),
+    { id: `${Date.now()}-${memberId}`, name, memberId },
+  ]
+  writeSavedLineages()
+  isSavingLineage.value = false
+}
+
+const openSavedLineage = (item: SavedLineage): void => {
+  if (lineageMemberId.value === item.memberId) {
+    void nextTick(() => treeWrapperRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    return
+  }
+  selectLineage(item.memberId)
+}
+
+const showWholeTree = (): void => {
+  clearFocusedTree()
+  void nextTick(() => treeWrapperRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  void centerOnRoot()
+}
+
+const removeSavedLineage = (item: SavedLineage): void => {
+  if (!window.confirm(`Xóa "${item.name}" khỏi danh sách đã lưu?`)) return
+  savedLineages.value = savedLineages.value.filter((entry) => entry.id !== item.id)
+  writeSavedLineages()
 }
 
 const syncFullViewState = (): void => {
@@ -1696,6 +1781,17 @@ watch(
   { immediate: true },
 )
 
+// "Vào xem gia phả" (at the end of the long Lời ngỏ): bring the gia phả book to the top of the window, just under
+// the slim title bar, centred on its root (unless the default person above takes over).
+watch(gateOpen, (open, wasOpen) => {
+  if (open && !wasOpen && !(defaultMemberId.value && units.value.memberToUnitKey.has(defaultMemberId.value))) {
+    setTimeout(() => {
+      treeWrapperRef.value?.scrollIntoView({ block: 'start', behavior: 'auto' })
+      void centerOnRoot()
+    }, 50)
+  }
+})
+
 onMounted(() => {
   if (canvasRef.value) {
     if (typeof ResizeObserver !== 'undefined') {
@@ -1719,7 +1815,102 @@ onMounted(() => {
   void centerOnRoot()
 })
 
+// ---- Drag to pan with the mouse (like swiping on a phone) ----
+// Press and drag anywhere on the gia phả except buttons/fields: sideways moves the tree, up/down scrolls the page
+// (or the tree itself in Full view). Letting go with some speed glides on a little, then slows to a stop.
+// Touch screens already scroll natively, so only the mouse is handled.
+const PAN_THRESHOLD = 5 // px before a press becomes a drag (a plain click stays a click)
+const isPanning = ref(false)
+let pan: { startX: number; startY: number; lastX: number; lastY: number; lastTime: number; vx: number; vy: number } | null = null
+let panMomentumFrame = 0
+
+const isPanBlocked = (target: EventTarget | null): boolean =>
+  target instanceof Element &&
+  Boolean(target.closest('button, a, input, textarea, select, label, [contenteditable="true"], .search-results, .print-menu'))
+
+const panScrollBy = (dx: number, dy: number): void => {
+  const wrapper = treeWrapperRef.value
+  if (!wrapper) return
+  wrapper.scrollLeft -= dx
+  const scrollsItself = wrapper.scrollHeight > wrapper.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(wrapper).overflowY)
+  if (scrollsItself) {
+    wrapper.scrollTop -= dy
+  } else {
+    window.scrollBy(0, -dy)
+  }
+}
+
+const onPanMove = (event: PointerEvent): void => {
+  if (!pan) return
+  if (!isPanning.value) {
+    if (Math.hypot(event.clientX - pan.startX, event.clientY - pan.startY) < PAN_THRESHOLD) return
+    isPanning.value = true
+    window.getSelection()?.removeAllRanges()
+  }
+  event.preventDefault()
+  const now = performance.now()
+  const dx = event.clientX - pan.lastX
+  const dy = event.clientY - pan.lastY
+  const dt = Math.max(1, now - pan.lastTime)
+  // smoothed speed (px/ms), for the glide after letting go
+  pan.vx = 0.8 * (dx / dt) + 0.2 * pan.vx
+  pan.vy = 0.8 * (dy / dt) + 0.2 * pan.vy
+  pan.lastX = event.clientX
+  pan.lastY = event.clientY
+  pan.lastTime = now
+  panScrollBy(dx, dy)
+}
+
+// The click that ends a drag must not press whatever card/button is under the mouse.
+const swallowClick = (event: MouseEvent): void => {
+  event.stopPropagation()
+  event.preventDefault()
+}
+
+const glide = (vx: number, vy: number): void => {
+  let lastTime = performance.now()
+  const step = (now: number): void => {
+    const dt = Math.min(32, now - lastTime)
+    lastTime = now
+    const decay = Math.pow(0.95, dt / 16) // ~5% slower every frame
+    vx *= decay
+    vy *= decay
+    if (Math.abs(vx) < 0.02 && Math.abs(vy) < 0.02) return
+    panScrollBy(vx * dt, vy * dt)
+    panMomentumFrame = requestAnimationFrame(step)
+  }
+  panMomentumFrame = requestAnimationFrame(step)
+}
+
+const onPanEnd = (): void => {
+  window.removeEventListener('pointermove', onPanMove)
+  window.removeEventListener('pointerup', onPanEnd)
+  window.removeEventListener('pointercancel', onPanEnd)
+  if (pan && isPanning.value) {
+    window.addEventListener('click', swallowClick, { capture: true, once: true })
+    setTimeout(() => window.removeEventListener('click', swallowClick, { capture: true }), 0)
+    // released while still moving (not after holding still): glide on
+    const stillMoving = performance.now() - pan.lastTime < 80
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (stillMoving && !reduceMotion) glide(pan.vx, pan.vy)
+  }
+  pan = null
+  isPanning.value = false
+}
+
+const onPanStart = (event: PointerEvent): void => {
+  if (event.pointerType !== 'mouse' || event.button !== 0 || isPanBlocked(event.target)) return
+  cancelAnimationFrame(panMomentumFrame)
+  const now = performance.now()
+  pan = { startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, lastTime: now, vx: 0, vy: 0 }
+  window.addEventListener('pointermove', onPanMove)
+  window.addEventListener('pointerup', onPanEnd)
+  window.addEventListener('pointercancel', onPanEnd)
+}
+
 onBeforeUnmount(() => {
+  onPanEnd()
+  cancelAnimationFrame(panMomentumFrame)
   document.removeEventListener('fullscreenchange', syncFullViewState)
   canvasResizeObserver?.disconnect()
   window.removeEventListener('resize', scheduleInLawLinks)
@@ -1762,7 +1953,9 @@ onBeforeUnmount(() => {
   <section
     ref="treeWrapperRef"
     class="tree-wrapper"
-    :class="{ 'full-view-active': isFullView, 'pseudo-full-view': isPseudoFullView }"
+    :class="{ 'full-view-active': isFullView, 'pseudo-full-view': isPseudoFullView, 'is-panning': isPanning }"
+    @pointerdown="onPanStart"
+    @dragstart.prevent
     aria-labelledby="tree-block-title"
   >
     <!-- zero-height bar that stays in view while the tree scrolls sideways; holds the ✕ in the top right corner -->
@@ -1923,6 +2116,36 @@ onBeforeUnmount(() => {
 
     <p v-if="fullViewError" class="full-view-error">{{ fullViewError }}</p>
 
+    <!-- "Đã lưu": the reader's named dòng trực hệ, one click to open again (this browser only) -->
+    <div v-if="visibleSavedLineages.length > 0" class="saved-lineages" role="group" aria-label="Danh sách đã lưu">
+      <span class="saved-lineages-title">📌 Đã lưu:</span>
+      <!-- back to the whole tree after opening a saved entry -->
+      <span class="saved-lineage saved-lineage--all" :class="{ 'is-active': !lineageKey && !selectedUnitKey }">
+        <button type="button" class="saved-lineage-open" title="Xem toàn bộ gia phả" @click="showWholeTree">
+          🌳 Toàn bộ gia phả
+        </button>
+      </span>
+      <span
+        v-for="item in visibleSavedLineages"
+        :key="item.id"
+        class="saved-lineage"
+        :class="{ 'is-active': item.memberId === lineageMemberId }"
+      >
+        <button type="button" class="saved-lineage-open" :title="`Xem dòng trực hệ: ${item.name}`" @click="openSavedLineage(item)">
+          {{ item.name }}
+        </button>
+        <button
+          type="button"
+          class="saved-lineage-remove"
+          :aria-label="`Xóa ${item.name} khỏi danh sách đã lưu`"
+          title="Xóa khỏi danh sách"
+          @click="removeSavedLineage(item)"
+        >
+          ✕
+        </button>
+      </span>
+    </div>
+
     <div v-if="selectedUnitKey || lineageKey" class="detail-toolbar">
       <p v-if="lineageKey">
         Đang xem dòng trực hệ của:
@@ -1932,7 +2155,25 @@ onBeforeUnmount(() => {
         Đang xem chi tiết nhánh của:
         <strong>{{ selectedRootLabel }}</strong>
       </p>
-      <button type="button" @click="clearFocusedTree">{{ lineageKey ? 'Bỏ chọn' : 'Xem toàn bộ cây' }}</button>
+      <form v-if="lineageKey && isSavingLineage" class="save-lineage-form" @submit.prevent="saveCurrentLineage">
+        <input
+          ref="savedLineageInputRef"
+          v-model="savedLineageName"
+          type="text"
+          maxlength="60"
+          placeholder="Đặt tên, ví dụ: Nhánh ông nội"
+          aria-label="Tên để lưu"
+          @keydown.esc="isSavingLineage = false"
+        />
+        <button type="submit" :disabled="!savedLineageName.trim()">Lưu</button>
+        <button type="button" @click="isSavingLineage = false">Hủy</button>
+      </form>
+      <div v-else class="detail-toolbar-actions">
+        <button v-if="lineageKey" type="button" @click="startSavingLineage">
+          {{ isCurrentLineageSaved ? '📌 Đổi tên đã lưu' : '📌 Lưu vào danh sách' }}
+        </button>
+        <button type="button" @click="clearFocusedTree">{{ lineageKey ? 'Bỏ chọn' : 'Xem toàn bộ cây' }}</button>
+      </div>
     </div>
 
     <div ref="canvasRef" class="tree-canvas" :style="{ zoom }">
@@ -2006,8 +2247,8 @@ onBeforeUnmount(() => {
     url('/gia-pha-cloud-corner-tr.svg'),
     url('/gia-pha-cloud-corner-bl.svg'),
     url('/gia-pha-cloud-corner-br.svg'),
-    /* faint bamboo groves and coconut palms over the whole page, behind the tree */
-    url('/gia-pha-scenery.svg'),
+    /* faint hoa văn over the whole page, like the page background: Thọ medallions, tường vân clouds, lozenges */
+    url('/gia-pha-hoa-van.svg'),
     var(--book-spine),
     var(--book-page-curve),
     var(--book-page-stack),
@@ -2019,7 +2260,7 @@ onBeforeUnmount(() => {
     right 20px top 8px,
     left 20px bottom 8px,
     right 20px bottom 8px,
-    center top 120px,
+    center top,
     center,
     center,
     left top,
@@ -2030,7 +2271,7 @@ onBeforeUnmount(() => {
     140px 140px,
     140px 140px,
     140px 140px,
-    456px 864px,
+    240px 240px,
     100% 100%,
     100% 100%,
     12px 100%,
@@ -2243,6 +2484,103 @@ onBeforeUnmount(() => {
 
 .detail-toolbar button:hover {
   background: #ffe9c3;
+}
+
+.detail-toolbar button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.detail-toolbar-actions,
+.save-lineage-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.save-lineage-form input {
+  min-width: 0;
+  width: 16rem;
+  max-width: 100%;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid #a77f48;
+  border-radius: 8px;
+  background: #fffdf6;
+  color: #3d2a17;
+  font: inherit;
+}
+
+.save-lineage-form input:focus {
+  outline: 2px solid #c9a24a;
+  outline-offset: 1px;
+}
+
+/* "Đã lưu" list: one chip per saved dòng trực hệ */
+.saved-lineages {
+  position: sticky;
+  left: 0;
+  z-index: 8;
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+}
+
+.saved-lineages-title {
+  color: #5f3a1a;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.saved-lineage {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid #c8a66e;
+  border-radius: 999px;
+  background: rgba(255, 247, 232, 0.92);
+  overflow: hidden;
+}
+
+.saved-lineage.is-active {
+  border-color: #9b3a24;
+  background: #fbe3c4;
+  box-shadow: 0 0 0 1px #9b3a24;
+}
+
+.saved-lineage button {
+  border: 0;
+  background: transparent;
+  color: #5c3818;
+  font: inherit;
+  cursor: pointer;
+}
+
+.saved-lineage-open {
+  padding: 0.3rem 0.4rem 0.3rem 0.8rem;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+/* the "Toàn bộ gia phả" chip has no ✕ */
+.saved-lineage--all .saved-lineage-open {
+  padding-right: 0.8rem;
+}
+
+.saved-lineage-remove {
+  padding: 0.3rem 0.65rem 0.3rem 0.35rem;
+  font-size: 0.75rem;
+  color: #9b6a4a;
+}
+
+.saved-lineage button:hover {
+  background: #ffe9c3;
+}
+
+.saved-lineage-remove:hover {
+  color: #a3241a;
 }
 
 .full-view-active {
@@ -2476,13 +2814,30 @@ onBeforeUnmount(() => {
 .tree-wrapper {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
+  scroll-margin-top: 52px; /* scrolled to the top: clear the slim title bar */
+}
+
+/* Mouse: the tree can be dragged around (see onPanStart) */
+@media (hover: hover) and (pointer: fine) {
+  .tree-canvas {
+    cursor: grab;
+  }
+
+  .tree-wrapper.is-panning,
+  .tree-wrapper.is-panning * {
+    cursor: grabbing !important;
+    user-select: none;
+  }
 }
 
 /* Block 1 (above the gia phả): ngày giỗ bar + đám giỗ / Lễ Tết lists */
 .anniversary-panel {
   margin: 0 0 1rem;
   padding: 0.6rem;
-  background: linear-gradient(180deg, #f8ecd0, #f1e2bf);
+  /* same faint hoa văn as the gia phả page: Thọ medallions, tường vân clouds, lozenges */
+  background:
+    url('/gia-pha-hoa-van.svg') repeat center top / 240px 240px,
+    linear-gradient(180deg, #f8ecd0, #f1e2bf);
   border: 2px solid #c9a24a;
   border-radius: 12px;
   box-shadow:
@@ -2504,6 +2859,7 @@ onBeforeUnmount(() => {
   .anniversary-panel {
     padding: 0.4rem;
     border-radius: 10px;
+    background-size: 170px 170px, auto;
   }
 }
 
@@ -2643,7 +2999,7 @@ onBeforeUnmount(() => {
       right 12px top 6px,
       left 12px bottom 6px,
       right 12px bottom 6px,
-      center top 110px,
+      center top,
       center,
       center,
       left top,
@@ -2655,7 +3011,7 @@ onBeforeUnmount(() => {
       0 0,
       0 0,
       0 0,
-      304px 576px,
+      170px 170px,
       100% 100%,
       100% 100%,
       4px 100%,

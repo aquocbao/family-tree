@@ -19,6 +19,7 @@ import { solarDateTextToLunarText } from './utils/lunar'
 import { formatSolarDate, getUpcomingLunarEvents } from './utils/anniversary'
 import { isDeceased as isDeceasedMember } from './utils/memorial'
 import { spouseIdsOf } from './utils/spouses'
+import { describePendingChanges } from './utils/pending-changes'
 import {
   DEFAULT_LUNAR_EVENTS,
   MAX_LUNAR_EVENTS,
@@ -229,10 +230,21 @@ const onWindowScroll = (): void => {
   }
 }
 
+// The plaque animates between full and compact (0.25s): only measure it once it has settled at full size,
+// or the band would keep a compact (too short) height and the plaque would overlap what follows.
+let plaqueSettleTimer: ReturnType<typeof setTimeout> | undefined
+watch(isHeaderCompact, (compact) => {
+  clearTimeout(plaqueSettleTimer)
+  plaqueSettleTimer = setTimeout(() => {
+    plaqueSettleTimer = undefined
+    if (!compact) updateTitleLayout()
+  }, 320)
+})
+
 const updateTitleLayout = (): void => {
   const band = headerBandRef.value
   const header = appHeaderRef.value
-  if (band && header && !isHeaderCompact.value) {
+  if (band && header && !isHeaderCompact.value && !plaqueSettleTimer && !band.classList.contains('is-compact')) {
     // The band keeps the full plaque's height in the page flow, so shrinking it never makes the page jump.
     band.style.setProperty('--band-h', `${Math.round(header.offsetHeight + 28)}px`) // plaque + space below
   }
@@ -246,6 +258,15 @@ const updateTitleLayout = (): void => {
   let coupletShift = 0 // vertical translate; offsetTop ignores it, so measurements use the natural position
 
   const app = spacer.parentElement
+  const gate = document.querySelector<HTMLElement>('.gate')
+  // Wide screens, door / Lời ngỏ page: the scrolls' top rods level with the top of the door / Lời ngỏ (CSS: --gate-top)
+  if (app && gate && window.matchMedia('(min-width: 1100px)').matches) {
+    couplets.forEach((el) => (el.style.transform = ''))
+    spacer.style.height = '0px'
+    app.style.setProperty('--couplet-lift', '0px')
+    app.style.setProperty('--gate-top', `${Math.round(gate.getBoundingClientRect().top - app.getBoundingClientRect().top)}px`)
+    return
+  }
   const coupletStyle = getComputedStyle(couplet)
   if (coupletStyle.display === 'none' || coupletStyle.position !== 'absolute') {
     couplets.forEach((el) => (el.style.transform = ''))
@@ -264,7 +285,6 @@ const updateTitleLayout = (): void => {
   app?.style.setProperty('--couplet-lift', `${lift}px`)
 
   // Door / Lời ngỏ page: the scrolls hang beside it, their tops level with its top
-  const gate = document.querySelector<HTMLElement>('.gate')
   if (gatePhase.value !== 'open' && gate) {
     coupletShift = Math.max(0, Math.round(gate.offsetTop - couplet.offsetTop))
   }
@@ -320,6 +340,17 @@ const CONTRIBUTOR_DENIED = 'Người đóng góp chỉ được sửa/xóa thàn
 provide('canManageMember', canManageMember)
 provide('isNewMember', (id: string) => isEditableMode.value && isNewMember(id))
 const hasPendingChanges = computed(() => pendingMembers.value !== null)
+// Super admin: what the admin / người đóng góp changed, as text, to read before approving or rejecting
+const pendingChangeList = computed(() =>
+  pendingMembers.value
+    ? describePendingChanges(
+        approvedMembers.value,
+        pendingMembers.value,
+        approvedSettings.value,
+        pendingSettings.value ?? approvedSettings.value,
+      )
+    : [],
+)
 
 const members = computed<FamilyMember[]>(() => {
   if (mode.value === 'view') {
@@ -1463,6 +1494,21 @@ onMounted(async () => {
       </template>
     </section>
 
+    <section v-if="isSuperAdminMode && hasPendingChanges" class="review-changes" aria-label="Danh sách thay đổi chờ duyệt">
+      <h3>Thay đổi chờ duyệt ({{ pendingChangeList.length }})</h3>
+      <p v-if="pendingChangeList.length === 0" class="review-changes-empty">
+        Bản chờ duyệt giống dữ liệu đã duyệt (không có thay đổi nội dung).
+      </p>
+      <ul v-else>
+        <li v-for="(change, index) in pendingChangeList" :key="index" :class="`review-change--${change.kind}`">
+          <strong>{{ change.title }}</strong>
+          <ul v-if="change.details.length > 0">
+            <li v-for="(detail, detailIndex) in change.details" :key="detailIndex">{{ detail }}</li>
+          </ul>
+        </li>
+      </ul>
+    </section>
+
     <div v-if="canEditSettings" class="admin-panels">
       <section class="settings-panel">
         <header class="panel-head">
@@ -2137,6 +2183,52 @@ onMounted(async () => {
   font-weight: 600;
 }
 
+/* Super admin: plain-text list of the pending changes */
+.review-changes {
+  margin: -0.4rem 0 1rem;
+  padding: 0.75rem 0.9rem;
+  background: #fffdf6;
+  border: 1px solid #e3c79a;
+  border-radius: 12px;
+  color: #3d2a17;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.review-changes h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  color: #5f3a1a;
+}
+
+.review-changes-empty {
+  margin: 0;
+}
+
+.review-changes > ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.review-changes > ul > li {
+  margin: 0.35rem 0;
+}
+
+.review-changes ul ul {
+  margin: 0.15rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+  color: #5f4a33;
+}
+
+.review-change--added > strong {
+  color: #2d6a2d;
+}
+
+.review-change--removed > strong {
+  color: #a3241a;
+}
+
 .approve-btn {
   border: 1px solid #8ca7de;
   border-radius: 8px;
@@ -2369,6 +2461,39 @@ onMounted(async () => {
 @media (min-width: 1100px) {
   .app {
     --app-pad-x: calc(min(3.4rem, 5.5vh) * 1.9 + 2.6rem);
+  }
+
+  .couplet {
+    transition: left 0.8s ease, right 0.8s ease;
+  }
+
+  /* Door / Lời ngỏ page: the scrolls hang beside it and scroll with it, their top rods (0.5rem above the
+     scroll) level with its top. --gate-top is measured in updateTitleLayout(). */
+  .app--door,
+  .app--welcome {
+    position: relative;
+  }
+
+  .app--door .couplet,
+  .app--welcome .couplet {
+    position: absolute;
+    top: calc(var(--gate-top, 12rem) + 0.5rem);
+    transform: none;
+  }
+
+  /* Lời ngỏ page: the scrolls hang right beside the Lời ngỏ (860px wide + its rods, GateDoor.vue), not at the window edges */
+  .app--welcome .couplet--left {
+    left: max(1rem, calc(50% - 430px - 14px - 2rem - var(--char-size) * 1.9));
+  }
+
+  .app--welcome .couplet--right {
+    right: max(1rem, calc(50% - 430px - 14px - 2rem - var(--char-size) * 1.9));
+  }
+}
+
+@media (min-width: 1100px) and (prefers-reduced-motion: reduce) {
+  .couplet {
+    transition: none;
   }
 }
 
