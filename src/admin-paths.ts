@@ -1,6 +1,6 @@
 // Secret paths for the management pages (the old /admin and /super-admin no longer work).
-export const ADMIN_PATH = '/Nwd4aJiepNwDiD9BmRNrHnbYVqcGqqoy'
-export const SUPER_ADMIN_PATH = '/4aZcqAoC4LbKsWVf7RTFTvtKZeeUy2CB'
+export const ADMIN_PATH = '/Nwd4aJiepNwDiD9BmRNrHnbYVqcGqqoyrLOW5r4h51RKMCf5JsTV2Z8gZQMWIkqUggsh0I47iXpeG6ATXUCYoGbWrvtucAKP'
+export const SUPER_ADMIN_PATH = '/4aZcqAoC4LbKsWVf7RTFTvtKZeeUy2CBpfmOdNNcRBYlta40VVcjZNbTQeZiEqK86zXf187o2zIxh6sLq9wJl8XEX2C9yMwc'
 // Người đóng góp: may only add members and edit/delete members not approved yet.
 export const CONTRIBUTOR_PATH = '/dong-gop'
 
