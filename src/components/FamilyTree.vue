@@ -4,6 +4,7 @@ import AnniversaryBar from './AnniversaryBar.vue'
 import AnniversaryList from './AnniversaryList.vue'
 import FamilyTreeNode from './FamilyTreeNode.vue'
 import SearchableMemberSelect from './SearchableMemberSelect.vue'
+import '../house-view.css'
 import type { FamilyMember, FamilyUnit } from '../types/family'
 import type { LunarEvent } from '../utils/lunar-events'
 import { honorific, isDeceased, memorialPlaceLabel } from '../utils/memorial'
@@ -97,6 +98,33 @@ const writeSavedLineages = (): void => {
     // private mode / storage blocked: works until the page is reloaded
   }
 }
+// "Nhà 3D" (the default): each family drawn as a little wooden house on a tree.
+// "Kiểu sổ" is the book style; this browser remembers the choice.
+const VIEW_STYLE_KEY = 'gia-pha-view-style'
+const readHouseView = (): boolean => {
+  try {
+    return localStorage.getItem(VIEW_STYLE_KEY) !== 'book'
+  } catch {
+    return true
+  }
+}
+const isHouseView = ref(readHouseView())
+// Printing lays the tree out in the plain book style
+const isHouseSuspended = ref(false)
+const houseViewActive = computed(() => isHouseView.value && !isHouseSuspended.value)
+provide('houseView', houseViewActive)
+const toggleHouseView = async (): Promise<void> => {
+  isHouseView.value = !isHouseView.value
+  try {
+    localStorage.setItem(VIEW_STYLE_KEY, isHouseView.value ? 'house' : 'book')
+  } catch {
+    // storage blocked: the choice lasts until the page is reloaded
+  }
+  await nextTick()
+  scheduleInLawLinks()
+  void centerOnRoot()
+}
+
 const isSavingLineage = ref(false)
 const savedLineageName = ref('')
 const savedLineageInputRef = ref<HTMLInputElement | null>(null)
@@ -1629,6 +1657,7 @@ const printDiagram = async (): Promise<void> => {
 
   // Lay the tree out in print form (no avatars/buttons) so lines and row heights match the smaller cards
   canvas.classList.add('tree-print-mode')
+  isHouseSuspended.value = true
   let clone: HTMLElement
   try {
     await nextTick()
@@ -1640,6 +1669,8 @@ const printDiagram = async (): Promise<void> => {
     clone = canvas.cloneNode(true) as HTMLElement
   } finally {
     canvas.classList.remove('tree-print-mode')
+    isHouseSuspended.value = false
+    await nextTick()
     scheduleInLawLinks()
   }
   clone.style.zoom = '1'
@@ -1991,7 +2022,7 @@ onBeforeUnmount(() => {
   <section
     ref="treeWrapperRef"
     class="tree-wrapper"
-    :class="{ 'full-view-active': isFullView, 'pseudo-full-view': isPseudoFullView, 'is-panning': isPanning }"
+    :class="{ 'full-view-active': isFullView, 'pseudo-full-view': isPseudoFullView, 'is-panning': isPanning, 'house-view': houseViewActive }"
     @pointerdown="onPanStart"
     @dragstart.prevent
     aria-labelledby="tree-block-title"
@@ -2137,6 +2168,16 @@ onBeforeUnmount(() => {
         </button>
         </div>
         </Transition>
+        <button
+          type="button"
+          class="full-view-btn house-view-btn"
+          :aria-pressed="isHouseView"
+          :title="isHouseView ? 'Về kiểu sổ gia phả' : 'Xem kiểu nhà 3D: mỗi gia đình là một ngôi nhà trên cây'"
+          @click="toggleHouseView"
+        >
+          <span class="btn-icon" aria-hidden="true">{{ isHouseView ? '📖' : '🏡' }}</span>
+          <span class="btn-label">{{ isHouseView ? 'Kiểu sổ' : 'Nhà 3D' }}</span>
+        </button>
         <button
           type="button"
           class="full-view-btn tools-toggle"

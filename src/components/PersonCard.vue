@@ -106,6 +106,18 @@ const isDeceased = computed(() => Boolean(props.member.deceased || lunarDeathDat
 // Marked đã mất but no date known
 const deathDateUnknown = computed(() => Boolean(props.member.deceased && !props.member.deathDate && !lunarDeathDate.value))
 
+// Nhà 3D: the plaque under the portrait reads "(1900 - 1980)", or "(1960 - )" while living
+const houseView = inject<Ref<boolean> | undefined>('houseView', undefined)
+const yearOf = (value?: string): string => value?.match(/\d{4}/)?.[0] ?? ''
+const lifeYears = computed(() => {
+  const born = props.showBirthDate ? yearOf(props.member.birthDate) : ''
+  const diedYear = props.showDeathDate ? yearOf(props.member.deathDate) : ''
+  // no year known at all → no plaque line ("? - ?" says nothing)
+  if (!born && !diedYear) return ''
+  const died = isDeceased.value ? diedYear || '?' : ''
+  return `${born || '?'} - ${died}`
+})
+
 const formatDate = (value?: string): string => {
   if (!value) {
     return '—'
@@ -160,7 +172,12 @@ const formatDate = (value?: string): string => {
           </g>
         </svg>
       </div>
-      <h3>{{ member.name }}</h3>
+      <div class="name-plaque">
+        <h3>{{ member.name }}</h3>
+        <span v-if="houseView && lifeYears" class="life-years">({{ lifeYears }})</span>
+      </div>
+      <!-- Nhà 3D: shown as a small note on hover instead of inside the card -->
+      <div class="details">
       <p v-if="showBirthDate"><strong>Ngày sinh:</strong> {{ formatDate(member.birthDate) }}</p>
       <p v-if="showDeathDate && member.deathDate"><strong>Ngày mất:</strong> {{ formatDate(member.deathDate) }}</p>
       <p v-if="showDeathDate && lunarDeathDate"><strong>Ngày mất (âm lịch):</strong> {{ lunarDeathDate }}</p>
@@ -169,6 +186,7 @@ const formatDate = (value?: string): string => {
         <strong>Nơi giỗ:</strong> {{ memorialPlace }}
       </p>
       <p v-if="canShowSpouse"><strong>Vợ/Chồng:</strong> {{ spouseNames }}</p>
+      </div>
     </template>
 
     <div class="actions">

@@ -1,0 +1,398 @@
+/*
+ * "Nhà 3D": the gia phả drawn as little wooden houses on a tree.
+ * Each family (a couple, a person with several spouses, a pair of in-law parents) is one house:
+ * a lit room with a lantern, a roof and a gable on top, and the cards become portraits with a name plaque.
+ * The lines between generations become thick branches. Turned on by .house-view on .tree-wrapper
+ * (FamilyTree.vue); everything here is scoped under it, so the book style is untouched.
+ *
+ * Selectors start with section.tree-wrapper.house-view (and .tree-canvas inside it) so they win over the
+ * components' scoped styles, which have the same classes plus one data attribute.
+ */
+
+/* ---- scenery: sky, misty mountains and a meadow, in a wooden frame ---- */
+section.tree-wrapper.house-view {
+  --house-wood: #7a4a24;
+  --house-wood-dark: #4b2b12;
+  --house-branch: #6e4520;
+  --branch: 7px;
+  background-color: #cfe3ee;
+  background-image:
+    url('/gia-pha-house-hills.svg'),
+    radial-gradient(ellipse at 20% 12%, rgba(255, 255, 255, 0.75), transparent 40%),
+    radial-gradient(ellipse at 78% 18%, rgba(255, 255, 255, 0.6), transparent 35%),
+    linear-gradient(180deg, #9fc6e2 0%, #d4e7f1 42%, #f4ead4 72%, #e7d9b9 100%);
+  background-repeat: no-repeat;
+  background-position: center bottom, 0 0, 0 0, 0 0;
+  background-size: 100% 240px, 100% 100%, 100% 100%, 100% 100%;
+  border: 12px solid var(--house-wood);
+  border-image: linear-gradient(160deg, #a06a3a, #5a3518 45%, #7a4a24 55%, #a06a3a) 1;
+  box-shadow:
+    inset 0 0 40px rgba(60, 40, 15, 0.18),
+    0 0 0 2px #c9a24a,
+    0 0 0 4px var(--house-wood-dark),
+    0 18px 36px rgba(40, 25, 10, 0.35);
+}
+
+section.tree-wrapper.house-view .tree-root {
+  /* room under the last row for the meadow */
+  padding-bottom: 3rem;
+}
+
+/* ---- the house ---- */
+section.tree-wrapper.house-view .tree-canvas .unit-main,
+section.tree-wrapper.house-view .tree-canvas .inlaw-cards,
+section.tree-wrapper.house-view .tree-canvas .inlaw-child {
+  --wall: 9px;
+  --roof-h: 56px;
+  --eave: 22px;
+  position: relative;
+  padding: 34px 16px 20px;
+  border: var(--wall) solid var(--house-wood);
+  /* lighter on top, darker at the bottom: a bevel */
+  border-color: #9a6533 #6e4220 #55321a #7d4c25;
+  border-radius: 3px;
+  background-color: #ebcd96;
+  background-image:
+    /* lantern: a glowing paper ball… */
+    radial-gradient(circle at 50% 17px, #fff6d0 0 4px, #ffc65c 5px 8px, rgba(255, 190, 90, 0.5) 9px, rgba(255, 190, 90, 0) 46px),
+    /* …on a cord from the ceiling */
+    linear-gradient(90deg, transparent calc(50% - 1px), #5a3518 calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    /* warm light from the ceiling */
+    radial-gradient(ellipse 70% 90% at 50% 0%, rgba(255, 232, 170, 0.75), transparent 75%),
+    /* wooden floor */
+    repeating-linear-gradient(90deg, rgba(60, 30, 10, 0.18) 0 1px, transparent 1px 38px),
+    linear-gradient(to top, #8a552a 0, #a76d3a 13px, #6b4423 13px 15px, transparent 15px),
+    /* wall */
+    linear-gradient(180deg, #f3ddb2, #e2bf87);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+  background-size: 100% 100%, 100% 10px, 100% 100%, 100% 15px, 100% 100%, 100% 100%;
+  background-position: 0 0, 0 0, 0 0, 0 100%, 0 0, 0 0;
+  box-shadow:
+    /* the room is set back inside its frame */
+    inset 0 16px 18px -10px rgba(60, 30, 8, 0.5),
+    inset 14px 0 16px -12px rgba(60, 30, 8, 0.4),
+    inset -14px 0 16px -12px rgba(60, 30, 8, 0.4),
+    /* side and bottom of the box, for depth */
+    6px 7px 0 var(--house-wood-dark),
+    0 18px 26px -8px rgba(40, 20, 5, 0.5);
+}
+
+/* the roof sits in the space above the house */
+section.tree-wrapper.house-view .tree-canvas .unit-main,
+section.tree-wrapper.house-view .tree-canvas .inlaw-cards {
+  margin-top: calc(var(--roof-h) - 4px);
+}
+
+/* roof: a dark shingled triangle, wider than the walls */
+section.tree-wrapper.house-view .tree-canvas .unit-main::before,
+section.tree-wrapper.house-view .tree-canvas .inlaw-cards::before,
+section.tree-wrapper.house-view .tree-canvas .inlaw-child::before {
+  content: '';
+  position: absolute;
+  left: calc(-1 * (var(--wall) + var(--eave)));
+  right: calc(-1 * (var(--wall) + var(--eave)));
+  bottom: calc(100% + 4px);
+  height: var(--roof-h);
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.25) 0 2px, transparent 2px 10px),
+    linear-gradient(180deg, #6a3d1d, #3a200e);
+  clip-path: polygon(50% 0, 100% 86%, 100% 100%, 0 100%, 0 86%);
+  pointer-events: none;
+}
+
+/* gable: the planked wooden face under the roof */
+section.tree-wrapper.house-view .tree-canvas .unit-main::after,
+section.tree-wrapper.house-view .tree-canvas .inlaw-cards::after,
+section.tree-wrapper.house-view .tree-canvas .inlaw-child::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: calc(100% + var(--wall));
+  height: calc(var(--roof-h) - 14px);
+  background:
+    radial-gradient(circle at 50% 62%, #ffe4a0 0 5px, #5a3518 5px 7px, transparent 7px),
+    repeating-linear-gradient(90deg, #b47c46 0 13px, #8f5d31 13px 14px);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  pointer-events: none;
+}
+
+section.tree-wrapper.house-view .tree-canvas .inlaw-tag {
+  color: #4b2b12;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* FamilyTree sets "top" so the married-in child's wrapper is level with their partner's card;
+   pull the house up by its wall + padding so the card (not the house) lines up. */
+section.tree-wrapper.house-view .tree-canvas .inlaw-child {
+  margin-top: calc(-1 * (var(--wall) + 34px));
+}
+
+/* roofs reach past the walls: more room between houses */
+section.tree-wrapper.house-view .tree-canvas .node {
+  padding-left: 1.6rem;
+  padding-right: 1.6rem;
+}
+
+/* ---- branches instead of thin lines ----
+   The list keeps its top border (transparent) so the layout FamilyTree measures stays the same, and each
+   child draws its own piece of the bar: from its centre outwards, so the bar ends over the outer children
+   instead of running past them. */
+section.tree-wrapper.house-view .tree-canvas .children {
+  border-top: var(--branch) solid transparent;
+}
+
+section.tree-wrapper.house-view .tree-canvas .children > .node::after {
+  content: '';
+  position: absolute;
+  top: calc(-1rem - var(--branch));
+  left: -0.5rem;
+  right: -0.5rem;
+  height: var(--branch);
+  background: var(--house-branch);
+  pointer-events: none;
+}
+
+section.tree-wrapper.house-view .tree-canvas .children > .node:first-child::after {
+  left: calc(50% + var(--stem-shift));
+}
+
+section.tree-wrapper.house-view .tree-canvas .children > .node:last-child::after {
+  right: calc(50% - var(--stem-shift));
+}
+
+section.tree-wrapper.house-view .tree-canvas .children > .node:only-child::after {
+  display: none;
+}
+
+/* up from the parents' button to the bar… */
+section.tree-wrapper.house-view .tree-canvas .children::before {
+  top: calc(-0.8rem - var(--branch));
+  height: calc(0.8rem + var(--branch));
+  border-left: var(--branch) solid var(--house-branch);
+}
+
+/* …and down from the bar to each child's roof */
+section.tree-wrapper.house-view .tree-canvas .children > .node::before {
+  top: -1rem;
+  height: 2rem;
+  border-left: var(--branch) solid var(--house-branch);
+}
+
+/* a pair of leaf sprigs where the branch splits */
+section.tree-wrapper.house-view .tree-canvas .children:not([data-svg-stem]):not([data-group-stem]):not(:has(> .node:only-child))::after {
+  content: '';
+  position: absolute;
+  top: calc(-14px - var(--branch));
+  left: 50%;
+  width: 124px;
+  height: 36px;
+  transform: translateX(-50%);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 40'%3E%3Cpath d='M58 26 C42 24 26 18 10 6' stroke='%235b7a2e' stroke-width='2.5' fill='none'/%3E%3Cpath d='M38 20 C46 9 40 1 28 1 C28 11 31 17 38 20Z' fill='%236f9a34'/%3E%3Cpath d='M22 13 C20 4 12 -1 3 2 C6 10 13 14 22 13Z' fill='%2389b445'/%3E%3Cpath d='M46 25 C55 18 60 9 56 2 C47 6 44 15 46 25Z' fill='%23577f2a'/%3E%3C/svg%3E")
+      left center / 52px 36px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 40'%3E%3Cg transform='translate(60 0) scale(-1 1)'%3E%3Cpath d='M58 26 C42 24 26 18 10 6' stroke='%235b7a2e' stroke-width='2.5' fill='none'/%3E%3Cpath d='M38 20 C46 9 40 1 28 1 C28 11 31 17 38 20Z' fill='%236f9a34'/%3E%3Cpath d='M22 13 C20 4 12 -1 3 2 C6 10 13 14 22 13Z' fill='%2389b445'/%3E%3Cpath d='M46 25 C55 18 60 9 56 2 C47 6 44 15 46 25Z' fill='%23577f2a'/%3E%3C/g%3E%3C/svg%3E")
+      right center / 52px 36px no-repeat;
+  pointer-events: none;
+}
+
+/* lines drawn by FamilyTree in SVG: the same branches. Above the house walls, under the portraits. */
+section.tree-wrapper.house-view .tree-canvas .inlaw-links {
+  z-index: 1;
+}
+
+section.tree-wrapper.house-view .tree-canvas .inlaw-links path {
+  stroke: var(--house-branch);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+section.tree-wrapper.house-view .tree-canvas .inlaw-links path.is-dashed {
+  stroke: #8a6a3a;
+  stroke-width: 4;
+  stroke-dasharray: 10 7;
+}
+
+section.tree-wrapper.house-view .tree-canvas .inlaw-links .marriage-label {
+  fill: #4b2b12;
+  paint-order: stroke;
+  stroke: #f3ddb2;
+  stroke-width: 3px;
+}
+
+section.tree-wrapper.house-view .tree-canvas .spouse-line {
+  width: 22px;
+  border-top: 3px solid #8a5a2b;
+}
+
+section.tree-wrapper.house-view .tree-canvas .inlaw-cards .spouse-line {
+  border-top: 3px dashed #8a5a2b;
+}
+
+section.tree-wrapper.house-view .tree-canvas .toggle {
+  position: relative;
+  z-index: 2;
+  border-color: var(--house-wood);
+  background: linear-gradient(#fff6e0, #efd7a4);
+  color: #5a3518;
+  box-shadow: 0 2px 0 var(--house-wood);
+}
+
+/* ---- the person: a portrait with a name plaque ---- */
+section.tree-wrapper.house-view .tree-canvas .person-card {
+  z-index: 2;
+  align-items: center;
+  min-width: 150px;
+  padding: 0.2rem 0.3rem 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+section.tree-wrapper.house-view .tree-canvas .person-card:hover,
+section.tree-wrapper.house-view .tree-canvas .person-card:focus-within {
+  z-index: 6;
+}
+
+section.tree-wrapper.house-view .tree-canvas .person-card .avatar {
+  width: 88px;
+  height: 88px;
+  margin: 0 auto;
+  border: 3px solid #f3e2bd;
+  box-shadow:
+    0 0 0 2px #8a5a2b,
+    0 8px 12px rgba(50, 25, 5, 0.4);
+}
+
+/* đã mất: a faded portrait */
+section.tree-wrapper.house-view .tree-canvas .person-card--deceased .avatar {
+  filter: grayscale(0.45) sepia(0.2);
+}
+
+section.tree-wrapper.house-view .tree-canvas .person-card .name-plaque {
+  position: relative;
+  margin-top: -10px;
+  padding: 0.3rem 0.85rem 0.35rem;
+  border: 2px solid #5a3518;
+  border-radius: 8px;
+  background: linear-gradient(#fcf2dc, #ead3a5);
+  box-shadow:
+    inset 0 0 0 2px #fbecd0,
+    inset 0 0 0 3px #b98b52,
+    0 3px 0 #5a3518,
+    0 7px 10px rgba(40, 20, 5, 0.3);
+  text-align: center;
+}
+
+section.tree-wrapper.house-view .tree-canvas .person-card h3 {
+  margin: 0;
+  color: #3b2412;
+  font-family: 'Noto Serif', Georgia, serif;
+  font-size: 1rem;
+}
+
+section.tree-wrapper.house-view .tree-canvas .person-card .life-years {
+  display: block;
+  color: #5c3d22;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* "Đã ẩn thông tin" */
+section.tree-wrapper.house-view .tree-canvas .person-card > h3 {
+  padding: 0.4rem 0.8rem;
+  border: 2px dashed #8a5a2b;
+  border-radius: 8px;
+  background: rgba(252, 242, 220, 0.85);
+}
+
+section.tree-wrapper.house-view .tree-canvas .person-card .generation-tag {
+  top: 0;
+  left: 0;
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  background: #5a3518;
+  color: #fbecd0;
+}
+
+/* dates, nơi giỗ, vợ/chồng: a small note under the portrait while it is pointed at */
+section.tree-wrapper.house-view .tree-canvas .person-card .details {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  width: max-content;
+  max-width: 280px;
+  transform: translateX(-50%);
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #8a5a2b;
+  border-radius: 8px;
+  background: #fffaf0;
+  box-shadow: 0 8px 18px rgba(40, 20, 5, 0.3);
+  color: #3b2412;
+  font-size: 0.85rem;
+  text-align: left;
+  pointer-events: none;
+}
+
+section.tree-wrapper.house-view .tree-canvas .person-card .details p {
+  white-space: normal;
+}
+
+section.tree-wrapper.house-view .tree-canvas .person-card:hover .details:not(:empty),
+section.tree-wrapper.house-view .tree-canvas .person-card:focus-within .details:not(:empty) {
+  display: block;
+}
+
+section.tree-wrapper.house-view .tree-canvas .person-card .actions {
+  justify-content: center;
+  gap: 0.3rem;
+  padding-top: 0.55rem;
+}
+
+section.tree-wrapper.house-view .tree-canvas .person-card .actions button {
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  box-shadow: 0 1px 0 rgba(60, 30, 8, 0.35);
+}
+
+@media (max-width: 640px) {
+  section.tree-wrapper.house-view .tree-canvas .unit-main,
+  section.tree-wrapper.house-view .tree-canvas .inlaw-cards,
+  section.tree-wrapper.house-view .tree-canvas .inlaw-child {
+    --wall: 6px;
+    --roof-h: 40px;
+    --eave: 12px;
+    padding: 30px 8px 16px;
+  }
+
+  section.tree-wrapper.house-view .tree-canvas .inlaw-child {
+    margin-top: calc(-1 * (var(--wall) + 30px));
+  }
+
+  section.tree-wrapper.house-view .tree-canvas .node {
+    padding-left: 0.8rem;
+    padding-right: 0.8rem;
+  }
+
+  section.tree-wrapper.house-view .tree-canvas .person-card {
+    min-width: 110px;
+  }
+
+  section.tree-wrapper.house-view .tree-canvas .person-card .avatar {
+    width: 60px;
+    height: 60px;
+  }
+
+  section.tree-wrapper.house-view .tree-canvas .person-card h3 {
+    font-size: 0.85rem;
+  }
+
+  section.tree-wrapper.house-view {
+    --branch: 5px;
+  }
+}
