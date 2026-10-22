@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { DEFAULT_LOI_NGO, type LoiNgo } from '../data/loi-ngo'
+import { isHouseView } from '../view-style'
 
 /** "Lời ngỏ": the foreword of the family record, shown above the tree. Closed by default so the tree stays near the top. */
 withDefaults(defineProps<{ content?: LoiNgo }>(), { content: () => DEFAULT_LOI_NGO })
 </script>
 
 <template>
-  <details class="loi-ngo">
+  <details class="loi-ngo" :class="{ 'loi-ngo--house': isHouseView }">
     <summary>
       <span class="loi-ngo-title">Lời ngỏ</span>
       <span v-if="content.teaser" class="loi-ngo-teaser">{{ content.teaser }}</span>
@@ -108,6 +109,81 @@ summary:focus-visible {
   text-align: right;
   font-style: italic;
   font-weight: 600;
+}
+
+/* "Nhà 3D": a wooden notice board under a small roof */
+.loi-ngo--house {
+  position: relative;
+  margin-top: 4.5rem;
+  border: 10px solid #7a4a24;
+  border-image: linear-gradient(160deg, #a06a3a, #5a3518 45%, #7a4a24 55%, #a06a3a) 1;
+  border-radius: 0;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 0%, rgba(255, 232, 170, 0.55), transparent 75%),
+    linear-gradient(180deg, #fcf4de, #f0deb3);
+  box-shadow:
+    inset 0 12px 18px -10px rgba(60, 30, 8, 0.35),
+    6px 7px 0 #4b2b12,
+    0 16px 24px -8px rgba(40, 20, 5, 0.45);
+}
+
+.loi-ngo--house::before {
+  content: '';
+  position: absolute;
+  left: -40px;
+  right: -40px;
+  bottom: calc(100% + 6px);
+  height: 64px;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.25) 0 2px, transparent 2px 11px),
+    linear-gradient(180deg, #6a3d1d, #3a200e);
+  clip-path: polygon(50% 0, 100% 82%, 100% 100%, 0 100%, 0 82%);
+  pointer-events: none;
+}
+
+/* a lantern glowing under the eaves */
+.loi-ngo--house::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  width: 28px;
+  height: 34px;
+  transform: translateX(-50%);
+  background:
+    linear-gradient(#3a200e, #3a200e) center top / 2px 10px no-repeat,
+    radial-gradient(ellipse 12px 14px at 50% 60%, #fff0b8 0, #ffc65c 45%, #e2952c 80%, transparent 84%);
+  filter: drop-shadow(0 0 8px rgba(255, 190, 90, 0.7));
+  pointer-events: none;
+}
+
+.loi-ngo--house summary {
+  padding-top: 2.3rem;
+}
+
+.loi-ngo--house .loi-ngo-title {
+  color: #5a3518;
+}
+
+.loi-ngo--house .loi-ngo-hint {
+  color: #7a4a24;
+}
+
+.loi-ngo--house .loi-ngo-body {
+  border-top-color: rgba(122, 74, 36, 0.4);
+}
+
+@media (max-width: 640px) {
+  .loi-ngo--house {
+    margin-top: 3.25rem;
+    border-width: 7px;
+  }
+
+  .loi-ngo--house::before {
+    left: -7px;
+    right: -7px;
+    height: 46px;
+  }
 }
 
 @media (max-width: 640px) {

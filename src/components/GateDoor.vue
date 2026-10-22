@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from 'vue'
 import { DEFAULT_LOI_NGO, type LoiNgo } from '../data/loi-ngo'
+import { isHouseView } from '../view-style'
 
 /**
  * A closed lacquered double door over the family tree. Clicking the lock lifts its shackle, the two
@@ -102,7 +103,7 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
 </script>
 
 <template>
-  <div class="gate" :class="`gate--${shown}`">
+  <div class="gate" :class="[`gate--${shown}`, { 'gate--house': isHouseView }]">
     <div class="gate-content" :aria-hidden="shown === 'open' ? undefined : 'true'">
       <slot />
     </div>
@@ -747,6 +748,185 @@ onBeforeUnmount(() => timers.forEach((id) => clearTimeout(id)))
 
   .scroll-rod {
     margin: 0 -6px;
+  }
+}
+
+/* ==== "Nhà 3D": the entrance of a wooden house (roof, lanterns, plank doors) opening onto the hills,
+   and the Lời ngỏ pinned on a wooden notice board under a small roof ==== */
+.gate--house {
+  --roof: 96px;
+}
+
+.gate--house .gate-doors {
+  padding-top: var(--roof);
+}
+
+/* through the open doors: sky and hills, like the tree */
+.gate--house .gate-doors::before {
+  inset: var(--roof) 0 0;
+  background:
+    url('/gia-pha-house-hills.svg') center bottom / 100% 45% no-repeat,
+    radial-gradient(ellipse at 50% 30%, rgba(255, 246, 214, 0.95), transparent 55%),
+    linear-gradient(180deg, #a9cde6, #dcebf2 55%, #f4ead4);
+}
+
+/* the roof: dark shingles, wider than the doors */
+.gate--house .gate-beam {
+  inset: 0 -3% auto;
+  height: calc(var(--roof) + 6px);
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.25) 0 2px, transparent 2px 12px),
+    linear-gradient(180deg, #6a3d1d, #3a200e);
+  clip-path: polygon(50% 0, 100% 80%, 100% 100%, 0 100%, 0 80%);
+  box-shadow: none;
+}
+
+/* planked gable with a glowing round window */
+.gate--house .gate-beam::after {
+  content: '';
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: 6px;
+  height: calc(var(--roof) - 22px);
+  background:
+    radial-gradient(circle at 50% 62%, #fff0b8 0 9px, #ffc65c 10px 13px, #5a3518 13px 16px, transparent 16px),
+    repeating-linear-gradient(90deg, #b47c46 0 18px, #8f5d31 18px 19px);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+/* two red lanterns hanging from the eaves */
+.gate--house .gate-doors::after {
+  content: '';
+  position: absolute;
+  top: var(--roof);
+  left: 7%;
+  right: 7%;
+  height: 78px;
+  z-index: 3;
+  pointer-events: none;
+  background:
+    /* cords */
+    linear-gradient(#3a200e, #3a200e) left 21px top 0 / 2px 18px no-repeat,
+    linear-gradient(#3a200e, #3a200e) right 21px top 0 / 2px 18px no-repeat,
+    /* lanterns */
+    radial-gradient(ellipse 21px 26px at 50% 50%, #ffd27a 0, #e2452c 45%, #a3241a 80%, transparent 82%) left 0 top 18px / 44px 56px no-repeat,
+    radial-gradient(ellipse 21px 26px at 50% 50%, #ffd27a 0, #e2452c 45%, #a3241a 80%, transparent 82%) right 0 top 18px / 44px 56px no-repeat;
+  filter: drop-shadow(0 0 10px rgba(255, 170, 70, 0.55));
+  transition: opacity 0.5s ease;
+}
+
+.gate--house.gate--opening .gate-doors::after {
+  opacity: 0;
+}
+
+/* plank doors: vertical boards, two cross battens, a dark wooden frame */
+.gate--house .door {
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.25), transparent 16%, transparent 84%, rgba(0, 0, 0, 0.3)),
+    linear-gradient(transparent 21%, #6e4220 21% 25%, transparent 25% 77%, #6e4220 77% 81%, transparent 81%),
+    repeating-linear-gradient(90deg, transparent 0 52px, rgba(50, 25, 8, 0.55) 52px 54px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 3px, transparent 3px 9px),
+    linear-gradient(#b27a43, #94602f 55%, #7d4c25);
+  border-color: #4b2b12;
+  box-shadow:
+    inset 0 0 0 6px #5a3518,
+    inset 0 0 0 8px #c08a4f,
+    inset 0 0 40px rgba(40, 20, 5, 0.4);
+}
+
+/* recessed wooden panels; the characters are carved in gold */
+.gate--house .door-panel {
+  border-color: #c08a4f;
+  background: linear-gradient(#6e4220, #573318);
+  box-shadow:
+    inset 0 6px 12px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 5px #4b2b12,
+    inset 0 0 0 7px rgba(192, 138, 79, 0.7),
+    0 3px 8px rgba(0, 0, 0, 0.3);
+}
+
+.gate--house .lock-text {
+  border-color: #c08a4f;
+  background: rgba(58, 32, 14, 0.88);
+  color: #fbecd0;
+}
+
+/* Lời ngỏ page: a wooden notice board under a small roof */
+.gate--house .gate-welcome {
+  padding-top: 8px;
+}
+
+.gate--house .scroll-rod:first-child {
+  height: 70px;
+  margin: 0 -38px -4px;
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.25) 0 2px, transparent 2px 11px),
+    linear-gradient(180deg, #6a3d1d, #3a200e);
+  clip-path: polygon(50% 0, 100% 82%, 100% 100%, 0 100%, 0 82%);
+  box-shadow: none;
+}
+
+.gate--house .scroll-rod:last-child {
+  height: 16px;
+  margin: 0 -10px;
+  border-radius: 3px;
+  background: linear-gradient(#8a552a, #5a3518);
+  box-shadow: 0 8px 14px rgba(40, 20, 5, 0.4);
+}
+
+.gate--house .scroll-paper {
+  border: 12px solid #7a4a24;
+  border-image: linear-gradient(160deg, #a06a3a, #5a3518 45%, #7a4a24 55%, #a06a3a) 1;
+  background:
+    radial-gradient(ellipse 70% 40% at 50% 0%, rgba(255, 232, 170, 0.55), transparent 75%),
+    linear-gradient(180deg, #fcf4de, #f0deb3);
+  box-shadow:
+    inset 0 12px 18px -10px rgba(60, 30, 8, 0.35),
+    6px 7px 0 #4b2b12;
+}
+
+.gate--house .welcome-title {
+  color: #5a3518;
+}
+
+.gate--house .welcome-enter {
+  border-color: #c08a4f;
+  background: linear-gradient(#8a552a, #5a3518);
+  color: #fbecd0;
+  box-shadow: 0 3px 0 #3a200e, 0 6px 12px rgba(40, 20, 5, 0.35);
+}
+
+@media (max-width: 640px) {
+  .gate--house {
+    --roof: 64px;
+  }
+
+  /* narrow doors: the lanterns would hang over the characters */
+  .gate--house .gate-doors::after {
+    display: none;
+  }
+
+  .gate--house .door {
+    background-size: auto, auto, 34px 100%, auto, auto;
+    background-repeat: no-repeat, no-repeat, repeat, repeat, no-repeat;
+  }
+
+  /* full-width board: no overhang past the screen edge */
+  .gate--house .scroll-rod:first-child {
+    height: 48px;
+    margin: 0 0 -4px;
+  }
+
+  .gate--house .scroll-rod:last-child {
+    margin: 0;
+  }
+
+  .gate--house .scroll-paper {
+    border-width: 8px;
+    box-shadow: inset 0 12px 18px -10px rgba(60, 30, 8, 0.35);
   }
 }
 

@@ -5,6 +5,7 @@ import AnniversaryList from './AnniversaryList.vue'
 import FamilyTreeNode from './FamilyTreeNode.vue'
 import SearchableMemberSelect from './SearchableMemberSelect.vue'
 import '../house-view.css'
+import { isHouseView, setHouseView } from '../view-style'
 import type { FamilyMember, FamilyUnit } from '../types/family'
 import type { LunarEvent } from '../utils/lunar-events'
 import { honorific, isDeceased, memorialPlaceLabel } from '../utils/memorial'
@@ -99,27 +100,12 @@ const writeSavedLineages = (): void => {
   }
 }
 // "Nhà 3D" (the default): each family drawn as a little wooden house on a tree.
-// "Kiểu sổ" is the book style; this browser remembers the choice.
-const VIEW_STYLE_KEY = 'gia-pha-view-style'
-const readHouseView = (): boolean => {
-  try {
-    return localStorage.getItem(VIEW_STYLE_KEY) !== 'book'
-  } catch {
-    return true
-  }
-}
-const isHouseView = ref(readHouseView())
 // Printing lays the tree out in the plain book style
 const isHouseSuspended = ref(false)
 const houseViewActive = computed(() => isHouseView.value && !isHouseSuspended.value)
 provide('houseView', houseViewActive)
 const toggleHouseView = async (): Promise<void> => {
-  isHouseView.value = !isHouseView.value
-  try {
-    localStorage.setItem(VIEW_STYLE_KEY, isHouseView.value ? 'house' : 'book')
-  } catch {
-    // storage blocked: the choice lasts until the page is reloaded
-  }
+  setHouseView(!isHouseView.value)
   await nextTick()
   scheduleInLawLinks()
   void centerOnRoot()
