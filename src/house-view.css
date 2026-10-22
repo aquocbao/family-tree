@@ -153,12 +153,13 @@ section.tree-wrapper.house-view .tree-canvas .children > .node::after {
   pointer-events: none;
 }
 
+/* the outer ends reach the far edge of the branch going down, so the corner is square, not stepped */
 section.tree-wrapper.house-view .tree-canvas .children > .node:first-child::after {
-  left: calc(50% + var(--stem-shift));
+  left: calc(50% + var(--stem-shift) - var(--branch) / 2);
 }
 
 section.tree-wrapper.house-view .tree-canvas .children > .node:last-child::after {
-  right: calc(50% - var(--stem-shift));
+  right: calc(50% - var(--stem-shift) - var(--branch) / 2);
 }
 
 section.tree-wrapper.house-view .tree-canvas .children > .node:only-child::after {
@@ -174,8 +175,9 @@ section.tree-wrapper.house-view .tree-canvas .children::before {
 
 /* …and down from the bar to each child's roof */
 section.tree-wrapper.house-view .tree-canvas .children > .node::before {
-  top: -1rem;
-  height: 2rem;
+  /* from the top of the bar (a solid corner) to a little past the roof's peak (the roof is drawn over it) */
+  top: calc(-1rem - var(--branch));
+  height: calc(2rem + var(--branch) + 8px);
   border-left: var(--branch) solid var(--house-branch);
 }
 
@@ -206,6 +208,15 @@ section.tree-wrapper.house-view .tree-canvas .inlaw-links path {
   stroke-width: 5;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* parents → children: as thick as the CSS branches they join, so there is no step where they meet.
+   Butt ends so the line doesn't poke out above the marriage line it leaves from. */
+section.tree-wrapper.house-view .tree-canvas .inlaw-links path.is-stem {
+  stroke-width: var(--branch);
+  stroke-linecap: butt;
+  /* square corners, like the CSS branches */
+  stroke-linejoin: miter;
 }
 
 section.tree-wrapper.house-view .tree-canvas .inlaw-links path.is-dashed {

@@ -3,7 +3,7 @@
 // Plain TS with no Vue imports: also used by the server (worker/, vite.config.ts) to validate saves.
 
 export interface LoiNgo {
-  /** Short line under the "Lời ngỏ" title while it is collapsed (may be empty) */
+  /** Short text under the "Lời ngỏ" title while it is collapsed; may have several lines (may be empty) */
   teaser: string
   paragraphs: string[]
   /** Closing line, e.g. "Chào thân ái," (may be empty) */
@@ -13,6 +13,7 @@ export interface LoiNgo {
 export const MAX_LOI_NGO_PARAGRAPHS = 40
 export const MAX_LOI_NGO_PARAGRAPH = 4000
 export const MAX_LOI_NGO_LINE = 200
+export const MAX_LOI_NGO_TEASER = 1000
 
 export const DEFAULT_LOI_NGO: LoiNgo = {
   teaser: '“Chim có tổ, người có tông” · “Cây có cội, nước có nguồn”',
@@ -33,7 +34,8 @@ export const isValidLoiNgo = (value: unknown): value is LoiNgo => {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
   return (
-    isLine(v.teaser) &&
+    typeof v.teaser === 'string' &&
+    v.teaser.length <= MAX_LOI_NGO_TEASER &&
     isLine(v.sign) &&
     Array.isArray(v.paragraphs) &&
     v.paragraphs.length >= 1 &&

@@ -69,6 +69,8 @@ summary:focus-visible {
   font-style: italic;
   font-size: 0.95rem;
   color: #8a5a2b;
+  /* each line of the admin's text on its own line */
+  white-space: pre-line;
 }
 
 .loi-ngo-hint {

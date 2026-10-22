@@ -35,6 +35,7 @@ import {
   MAX_LOI_NGO_LINE,
   MAX_LOI_NGO_PARAGRAPH,
   MAX_LOI_NGO_PARAGRAPHS,
+  MAX_LOI_NGO_TEASER,
   cloneLoiNgo,
   isValidLoiNgo,
   type LoiNgo as LoiNgoContent,
@@ -1297,7 +1298,12 @@ function resetLoiNgoDraft(): void {
 }
 
 const loiNgoFromDraft = (draft: LoiNgoDraft): LoiNgoContent => ({
-  teaser: draft.teaser.trim(),
+  // keeps its line breaks; blank lines and spaces at the ends of lines are dropped
+  teaser: draft.teaser
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n'),
   paragraphs: draft.body
     .split(/\n\s*\n/)
     .map((text) => text.replace(/\s*\n\s*/g, ' ').trim())
@@ -1320,7 +1326,7 @@ const saveLoiNgo = async (): Promise<void> => {
   loiNgoMessage.value = ''
   const next = loiNgoFromDraft(loiNgoDraft.value)
   if (!isValidLoiNgo(next)) {
-    loiNgoError.value = `Cần ít nhất 1 đoạn (tối đa ${MAX_LOI_NGO_PARAGRAPHS} đoạn, mỗi đoạn tối đa ${MAX_LOI_NGO_PARAGRAPH} ký tự); câu mở đầu và lời chào tối đa ${MAX_LOI_NGO_LINE} ký tự.`
+    loiNgoError.value = `Cần ít nhất 1 đoạn (tối đa ${MAX_LOI_NGO_PARAGRAPHS} đoạn, mỗi đoạn tối đa ${MAX_LOI_NGO_PARAGRAPH} ký tự); câu mở đầu tối đa ${MAX_LOI_NGO_TEASER} ký tự; lời chào tối đa ${MAX_LOI_NGO_LINE} ký tự.`
     return
   }
   loiNgoError.value = ''
@@ -1666,7 +1672,13 @@ onMounted(async () => {
         <div class="loingo-grid">
           <label class="field">
             <span class="field-label">Câu mở đầu <small class="field-hint">(dòng nhỏ dưới tiêu đề "Lời ngỏ")</small></span>
-            <input v-model="loiNgoDraft.teaser" type="text" class="loingo-input" :maxlength="MAX_LOI_NGO_LINE" placeholder="Ví dụ: “Chim có tổ, người có tông”" />
+            <textarea
+              v-model="loiNgoDraft.teaser"
+              class="loingo-input loingo-teaser"
+              rows="3"
+              :maxlength="MAX_LOI_NGO_TEASER"
+              placeholder="Ví dụ: “Chim có tổ, người có tông”&#10;“Cây có cội, nước có nguồn”"
+            ></textarea>
           </label>
 
           <label class="field field--full">
@@ -2700,6 +2712,11 @@ onMounted(async () => {
 }
 
 /* reads like the Lời ngỏ itself: serif, generous line height, resizable */
+.loingo-teaser {
+  line-height: 1.6;
+  resize: vertical;
+}
+
 .loingo-body {
   min-height: 18rem;
   line-height: 1.7;

@@ -467,7 +467,8 @@ const generationOfMember = (memberId: string): number | undefined => {
 
 // ---- Connector lines for in-law parents (computed from the rendered layout) ----
 const canvasRef = ref<HTMLElement | null>(null)
-const inLawLinks = ref<{ key: string; d: string; dashed?: boolean }[]>([])
+/** stem: a line from parents down to their children (as thick as the branches in the house view) */
+const inLawLinks = ref<{ key: string; d: string; dashed?: boolean; stem?: boolean }[]>([])
 /** "Vợ 1", "Vợ 2"… written on each marriage line of a person with several spouses */
 const marriageLabels = ref<{ key: string; x: number; y: number; text: string }[]>([])
 let linkFrame = 0
@@ -511,7 +512,7 @@ const updateInLawLinks = (): void => {
     return
   }
 
-  const links: { key: string; d: string; dashed?: boolean }[] = []
+  const links: { key: string; d: string; dashed?: boolean; stem?: boolean }[] = []
 
   // A row that no longer has in-law parents beside it (branch collapsed): put its button back in the middle.
   for (const toggle of canvas.querySelectorAll<HTMLElement>('.unit-content > .toggle:not([data-couple-toggle])')) {
@@ -579,7 +580,7 @@ const updateInLawLinks = (): void => {
     if (familyChildren && mainBox && onlyChildBox) {
       familyChildren.setAttribute('data-svg-stem', '')
       const x = onlyChildBox.left + onlyChildBox.width / 2
-      links.push({ key: `${childId}-parents-down`, d: `M ${x} ${mainBox.bottom} L ${x} ${onlyChildBox.top}` })
+      links.push({ key: `${childId}-parents-down`, d: `M ${x} ${mainBox.bottom} L ${x} ${onlyChildBox.top}`, stem: true })
     } else if (familyChildren) {
       familyChildren.removeAttribute('data-svg-stem')
     }
@@ -636,7 +637,7 @@ const updateInLawLinks = (): void => {
       const childrenBox = children ? boxInCanvas(children, canvas) : null
       const stemEnd = toggleBox ? toggleBox.top : childrenBox ? childrenBox.top : null
       if (stemEnd !== null) {
-        links.push({ key: `${childId}-stem`, d: `M ${middleX} ${midY} L ${middleX} ${stemEnd}` })
+        links.push({ key: `${childId}-stem`, d: `M ${middleX} ${midY} L ${middleX} ${stemEnd}`, stem: true })
       }
     }
   }
@@ -784,12 +785,29 @@ const updateInLawLinks = (): void => {
     const items = group.querySelectorAll<HTMLElement>(':scope > .node')
     // one child: straight down to that child's card; several: down to the bar over them
     const firstItemBox = items.length === 1 ? boxInCanvas(items[0], canvas) : null
-    const endY = firstItemBox ? firstItemBox.top + 2 : groupBox.top + 1
+    let endY = firstItemBox ? firstItemBox.top + 2 : groupBox.top + 1
+    let x1 = groupBox.left + groupBox.width / 2
+    // House view, one child: one SVG line all the way to the peak of the child's roof (the CSS stub is hidden).
+    // Two lines drawn by different means never quite line up and show as a doubled, stepped branch.
+    const childMain = firstItemBox
+      ? items[0].querySelector<HTMLElement>(':scope > .unit-content > .unit-row > .unit-main')
+      : null
+    const childMainBox = childMain && houseViewActive.value ? boxInCanvas(childMain, canvas) : null
+    if (childMain && childMainBox) {
+      const roof = getComputedStyle(childMain, '::before')
+      // the roof's bottom edge is 4px above the inside of the top wall (house-view.css)
+      const roofTop = childMainBox.top + childMain.clientTop - 4 - (parseFloat(roof.height) || 0)
+      x1 = childMainBox.left + childMainBox.width / 2
+      endY = roofTop + 2
+      group.setAttribute('data-svg-stem', '')
+    } else {
+      group.removeAttribute('data-svg-stem')
+    }
     const elbow: Elbow = {
       key: `marriage-${group.dataset.linkA}-${group.dataset.linkB}`,
       x0,
       y0,
-      x1: groupBox.left + groupBox.width / 2,
+      x1,
       endY,
       floor: Math.max(y0, boxA.bottom, boxB.bottom),
       top: groupBox.top,
@@ -812,7 +830,11 @@ const updateInLawLinks = (): void => {
         elbows.length === 1
           ? Math.max(e.y0 + 12, e.top - 16)
           : Math.min(lowest, Math.max(e.y0 + 12, band + (rank.get(e) ?? 0) * 8))
-      links.push({ key: e.key, d: `M ${e.x0} ${e.y0} L ${e.x0} ${turnY} L ${e.x1} ${turnY} L ${e.x1} ${e.endY}` })
+      links.push({
+        key: e.key,
+        d: `M ${e.x0} ${e.y0} L ${e.x0} ${turnY} L ${e.x1} ${turnY} L ${e.x1} ${e.endY}`,
+        stem: true,
+      })
     }
   }
 
@@ -2244,7 +2266,7 @@ onBeforeUnmount(() => {
     <div ref="canvasRef" class="tree-canvas" :style="{ zoom }">
       <!-- Lines for a married-in child: down from their parents, and across to the partner they married -->
       <svg class="inlaw-links" aria-hidden="true">
-        <path v-for="link in inLawLinks" :key="link.key" :d="link.d" :class="{ 'is-dashed': link.dashed }" />
+        <path v-for="link in inLawLinks" :key="link.key" :d="link.d" :class="{ 'is-dashed': link.dashed, 'is-stem': link.stem }" />
         <text v-for="label in marriageLabels" :key="label.key" :x="label.x" :y="label.y" class="marriage-label">
           {{ label.text }}
         </text>
