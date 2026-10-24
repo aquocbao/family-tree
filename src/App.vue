@@ -1708,7 +1708,7 @@ onMounted(async () => {
       </section>
     </div>
 
-    <p v-if="isLoading" class="status-message">Đang tải dữ liệu từ file JSON...</p>
+    <!-- <p v-if="isLoading" class="status-message">Đang tải dữ liệu từ file JSON...</p> -->
     <p v-else-if="loadingError" class="status-message error">{{ loadingError }}</p>
 
     <!-- View page: the tree sits behind a closed door; click the lock to open it -->
